@@ -1,4 +1,4 @@
-﻿#Requires -Modules PowerShellGet -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 <#
     .NAME
         PowerShellModulesUpdater.ps1
@@ -361,9 +361,20 @@ else {
                 $LengthModuleLongestName = [byte]$([byte[]]$(@($ModulesToRemove | ForEach-Object -Process {$_.Length}) | Sort-Object | Select-Object -Last 1))
 
                 foreach ($Module in $ModulesToRemove) {
+                    Write-Output -InputObject ('{0}{1}/{2}   {3}{4}' -f ("`t",($C++).ToString($Digits),$CTotal,$Module,(' ' * [byte]$([byte]$($LengthModuleLongestName) - [byte]$($Module.Length)))))
+                    
+                    # Do not uninstall "PowerShellGet"
+                    if ($Module -eq 'PowerShellGet') {
+                        Write-Output -InputObject ('{0}{0}Will not uninstall "PowerShellGet" as it`s a requirement for this script.' -f ("`t"))
+                        Continue
+                    }
+                    
+                    # Remove Current Module
                     Uninstall-Module -Name $Module -Confirm:$false -AllVersions -Force -ErrorAction 'SilentlyContinue'
                     $Success = [bool]$($?)
-                    Write-Output -InputObject ('   {0}/{1}   {2}{3} Success? {4}.' -f (($C++).ToString($Digits),$CTotal,$Module,(' ' * [byte]$([byte]$($LengthModuleLongestName) - [byte]$($Module.Length))),$SuccessUninstallModule.ToString()))
+
+                    # Write Out Success
+                    Write-Output -InputObject ('{0}{0}Success? {1}.' -f ("`t",$Success.ToString()))
                     if ($Success) {$Script:ModulesInstalledNeedsRefresh = $true}
                 }
             }
@@ -374,7 +385,47 @@ else {
 
 
 
-#region    Main  
+#region    Main
+    # Start Time
+    New-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'TimeTotalStart'       -Value ([datetime]$([datetime]::Now))
+    
+
+    # Check that same module is not specified in both $ModulesWanted and $ModulesUnwanted
+    if (($ModulesWanted | Where-Object -FilterScript {$ModulesUnwanted -contains $_}).Count -ge 1) {
+        Throw ('ERROR - Same module(s) are specified in both $ModulesWanted and $ModulesUnwanted.')
+    }
+    
+  
+    # Prerequirement - NuGet (Package Provider)
+    Write-Output -InputObject ('{0}### Prerequirement - "NuGet" (Package Provider)' -f ("`r`n`r`n"))
+    $VersionNuGetMinimum   = [System.Version]$(Find-PackageProvider -Name 'NuGet' -Force -Verbose:$false -Debug:$false | Select-Object -ExpandProperty 'Version')
+    $VersionNuGetInstalled = [System.Version]$([System.Version[]]@(Get-PackageProvider -ListAvailable -Name 'NuGet' -ErrorAction 'SilentlyContinue' | Select-Object -ExpandProperty 'Version') | Sort-Object)[-1] 
+    if ((-not($VersionNuGetInstalled)) -or $VersionNuGetInstalled -lt $VersionNuGetMinimum) {        
+        Install-PackageProvider 'NuGet' –Force -Verbose:$false -Debug:$false -ErrorAction 'Stop'
+        Write-Output -InputObject ('{0}Not installed, or newer version available. Installing... Success? {1}' -f ("`t",$?.ToString()))
+    }
+    else {
+        Write-Output -InputObject ('{0}NuGet (Package Provider) is already installed.' -f ("`t"))
+    }
+
+
+    # Prerequirement - PowerShellGet (PowerShell Module)
+    Write-Output -InputObject ('# Prerequirement - NuGet (Package Provider)')
+    $ModulesRequired = [string[]]@('PowerShellGet')
+    foreach ($ModuleName in $ModulesRequired) {
+        Write-Output -InputObject ('{0}' -f ($Module))
+        $VersionModuleAvailable = [System.Version]$(Get-ModulePublishedVersion -ModuleName $ModuleName)
+        $VersionModuleInstalled = [System.Version]$(Get-InstalledModule -Name $Module -ErrorAction 'SilentlyContinue' | Select-Object -ExpandProperty 'Version')
+        if ((-not($VersionModuleInstalled)) -or $VersionModuleInstalled -lt $VersionModuleAvailable) {           
+            Install-Module -Name $Module -Repository 'PSGallery' -Scope 'AllUsers' -Verbose:$false -Debug:$false -Confirm:$false -Force -ErrorAction 'Stop'
+            Write-Output -InputObject ('{0}Not installed, or newer version available. Installing... Success? {1}' -f ("`t",$?.ToString()))
+        }
+        else {
+            Write-Output -InputObject ('{0}"{1}" (PowerShell Module) is already installed.' -f ("`t",$Module))
+        }
+    }
+
+
     # Uninstall Unwanted Modules
     Write-Output -InputObject ('{0}### Uninstall Unwanted Modules' -f ("`r`n`r`n"))
     if ($UninstallUnwantedModules) {
@@ -413,5 +464,12 @@ else {
     else {
         Write-Output -InputObject ('{0}Remove Outdated Modules is set to $false.' -f ("`t"))
     }
+
+
+    # Write Stats
+    Write-Output -InputObject ('{0}### Finished.' -f ("`r`n"))
+    Write-Output -InputObject ('Start Time:    {0}.' -f ($Script:TimeTotalStart.ToString('o')))
+    Write-Output -InputObject ('End Time:      {0}.' -f (($Script:TimeTotalEnd = [datetime]::Now).ToString('o')))
+    Write-Output -InputObject ('Total Runtime: {0}.' -f ([string]$([timespan]$($Script:TimeTotalEnd - $Script:TimeTotalStart)).ToString('hh\:mm\:ss')))
 #endregion Main
 }
