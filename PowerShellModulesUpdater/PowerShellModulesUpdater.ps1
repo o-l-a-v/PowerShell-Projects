@@ -11,9 +11,9 @@
 
     .NOTES
         Author:         Olav Rønnestad Birkeland
-        Version:        1.0.0.0
+        Version:        1.0.0.1
         Creation Date:  190310
-        Last Edit Date: 190310
+        Last Edit Date: 190312
 #>
 
 
@@ -415,13 +415,13 @@ else {
     foreach ($ModuleName in $ModulesRequired) {
         Write-Output -InputObject ('{0}' -f ($Module))
         $VersionModuleAvailable = [System.Version]$(Get-ModulePublishedVersion -ModuleName $ModuleName)
-        $VersionModuleInstalled = [System.Version]$(Get-InstalledModule -Name $Module -ErrorAction 'SilentlyContinue' | Select-Object -ExpandProperty 'Version')
+        $VersionModuleInstalled = [System.Version]$(Get-InstalledModule -Name $ModuleName -ErrorAction 'SilentlyContinue' | Select-Object -ExpandProperty 'Version')
         if ((-not($VersionModuleInstalled)) -or $VersionModuleInstalled -lt $VersionModuleAvailable) {           
-            Install-Module -Name $Module -Repository 'PSGallery' -Scope 'AllUsers' -Verbose:$false -Debug:$false -Confirm:$false -Force -ErrorAction 'Stop'
+            Install-Module -Name $ModuleName -Repository 'PSGallery' -Scope 'AllUsers' -Verbose:$false -Debug:$false -Confirm:$false -Force -ErrorAction 'Stop'
             Write-Output -InputObject ('{0}Not installed, or newer version available. Installing... Success? {1}' -f ("`t",$?.ToString()))
         }
         else {
-            Write-Output -InputObject ('{0}"{1}" (PowerShell Module) is already installed.' -f ("`t",$Module))
+            Write-Output -InputObject ('{0}"{1}" (PowerShell Module) is already installed.' -f ("`t",$ModuleName))
         }
     }
 
