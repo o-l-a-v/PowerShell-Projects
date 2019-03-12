@@ -401,7 +401,7 @@ else {
     $VersionNuGetMinimum   = [System.Version]$(Find-PackageProvider -Name 'NuGet' -Force -Verbose:$false -Debug:$false | Select-Object -ExpandProperty 'Version')
     $VersionNuGetInstalled = [System.Version]$([System.Version[]]@(Get-PackageProvider -ListAvailable -Name 'NuGet' -ErrorAction 'SilentlyContinue' | Select-Object -ExpandProperty 'Version') | Sort-Object)[-1] 
     if ((-not($VersionNuGetInstalled)) -or $VersionNuGetInstalled -lt $VersionNuGetMinimum) {        
-        Install-PackageProvider 'NuGet' –Force -Verbose:$false -Debug:$false -ErrorAction 'Stop'
+        $null = Install-PackageProvider 'NuGet' –Force -Verbose:$false -Debug:$false -ErrorAction 'Stop'
         Write-Output -InputObject ('{0}Not installed, or newer version available. Installing... Success? {1}' -f ("`t",$?.ToString()))
     }
     else {
@@ -410,14 +410,14 @@ else {
 
 
     # Prerequirement - PowerShellGet (PowerShell Module)
-    Write-Output -InputObject ('# Prerequirement - NuGet (Package Provider)')
+    Write-Output -InputObject ('### Prerequirement - NuGet (Package Provider)')
     $ModulesRequired = [string[]]@('PowerShellGet')
     foreach ($ModuleName in $ModulesRequired) {
-        Write-Output -InputObject ('{0}' -f ($Module))
+        Write-Output -InputObject ('{0}' -f ($ModuleName))
         $VersionModuleAvailable = [System.Version]$(Get-ModulePublishedVersion -ModuleName $ModuleName)
         $VersionModuleInstalled = [System.Version]$(Get-InstalledModule -Name $ModuleName -ErrorAction 'SilentlyContinue' | Select-Object -ExpandProperty 'Version')
         if ((-not($VersionModuleInstalled)) -or $VersionModuleInstalled -lt $VersionModuleAvailable) {           
-            Install-Module -Name $ModuleName -Repository 'PSGallery' -Scope 'AllUsers' -Verbose:$false -Debug:$false -Confirm:$false -Force -ErrorAction 'Stop'
+            $null = Install-Module -Name $ModuleName -Repository 'PSGallery' -Scope 'AllUsers' -Verbose:$false -Debug:$false -Confirm:$false -Force -ErrorAction 'Stop'
             Write-Output -InputObject ('{0}Not installed, or newer version available. Installing... Success? {1}' -f ("`t",$?.ToString()))
         }
         else {
