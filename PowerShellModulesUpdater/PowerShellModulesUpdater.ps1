@@ -11,9 +11,9 @@
 
     .NOTES
         Author:         Olav Rønnestad Birkeland
-        Version:        1.0.0.1
+        Version:        1.0.0.2
         Creation Date:  190310
-        Last Edit Date: 190312
+        Last Edit Date: 190313
 #>
 
 
@@ -27,37 +27,42 @@ if ((-not($IsAdmin)) -or ([System.Environment]::Is64BitOperatingSystem -and (-no
 else {
 #region    Settings & Variables
     # Action - What Options Would You Like To Perform
-    $InstallMissingModules = [bool] $true
-    $InstallUpdatedModules = [bool] $true
+    $InstallMissingModules    = [bool] $true
+    $InstallUpdatedModules    = [bool] $true
     $UninstallOutdatedModules = [bool] $true
     $UninstallUnwantedModules = [bool] $true
+    $SkipPrerequirements      = [bool] $true
     
+    # Settings - PowerShell Output Streams
+    $VerbosePreference  = 'SilentlyContinue'
+    $ProgressPreference = 'SilentlyContinue'
+
     # List of wanted modules
     $ModulesWanted = [string[]]@(
-        'Az',                     # Used for AzureRM. Combines and extends functionality from AzureRM and AzureRM.Netcore
-        'Azure',                  # Used for managing Classic Azure resources/ objects
-        'Azure.AnalysisServices', # Used for Azure Analysis Services
-        'Azure.Storage',          # Used for Azure Storage
-        'AzureAD',                # Used for managing Azure Active Directory resources/ objects
-        'ISESteroids',            # Used for extending PowerShell ISE functionality
-        'Microsoft.Graph.Intune', # Used for managing Intune using PowerShell Graph in the backend                                 
-        'PartnerCenter',          # Used for authentication against Azure CSP Subscriptions
-        'PackageManagement',      # Used for installing/ uninstalling modules
-        'PolicyFileEditor',       # Used for local group policy / gpedit.msc
-        'PowerShellGet',          # Used for installing updates
-        'PSWindowsUpdate'         # Used for updating Windows
+        'Az',                     # Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
+        'Az.Accounts',            # Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
+        'Az.Resources',           # Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
+        'Az.Websites',            # Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
+        'Azure',                  # Used for managing Classic Azure resources/ objects.
+        'Azure.AnalysisServices', # Used for Azure Analysis Services.
+        'Azure.Storage',          # Used for Azure Storage.
+        'AzureAD',                # Used for managing Azure Active Directory resources/ objects.
+        'ISESteroids',            # Used for extending PowerShell ISE functionality.
+        'Microsoft.Graph.Intune', # Used for managing Intune using PowerShell Graph in the backend.
+        'PartnerCenter',          # Used for authentication against Azure CSP Subscriptions.
+        'PackageManagement',      # Used for installing/ uninstalling modules.
+        'PolicyFileEditor',       # Used for local group policy / gpedit.msc.
+        'PowerShellGet',          # Used for installing updates.
+        'PSWindowsUpdate'         # Used for updating Windows.
     )
     
     # List of Unwanted Modules
     $ModulesUnwanted = [string[]]@(
         'AzureRM',                # (DEPRECATED, "Az" is it's successor)            Used for managing Azure Resource Manager resources/ objects
+        'AzureRM.Profile',        # (DEPRECATED, "Az" is it's successor)            Used for managing Azure Resource Manager resources/ objects
         'MSOnline',               # (DEPRECATED, "AzureAD" is it's successor)       Used for managing Microsoft Cloud Objects (Users, Groups, Devices, Domains...)
         'PartnerCenterModule'     # (DEPRECATED, "PartnerCenter" is it's successor) Used for authentication against Azure CSP Subscriptions
     )
-
-    #Settings - PowerShell Output Streams
-    $VerbosePreference  = 'SilentlyContinue'
-    $ProgressPreference = 'SilentlyContinue'
 #endregion Settings & Variables
 
 
@@ -396,32 +401,35 @@ else {
     }
     
   
-    # Prerequirement - NuGet (Package Provider)
-    Write-Output -InputObject ('{0}### Prerequirement - "NuGet" (Package Provider)' -f ("`r`n`r`n"))
-    $VersionNuGetMinimum   = [System.Version]$(Find-PackageProvider -Name 'NuGet' -Force -Verbose:$false -Debug:$false | Select-Object -ExpandProperty 'Version')
-    $VersionNuGetInstalled = [System.Version]$([System.Version[]]@(Get-PackageProvider -ListAvailable -Name 'NuGet' -ErrorAction 'SilentlyContinue' | Select-Object -ExpandProperty 'Version') | Sort-Object)[-1] 
-    if ((-not($VersionNuGetInstalled)) -or $VersionNuGetInstalled -lt $VersionNuGetMinimum) {        
-        $null = Install-PackageProvider 'NuGet' –Force -Verbose:$false -Debug:$false -ErrorAction 'Stop'
-        Write-Output -InputObject ('{0}Not installed, or newer version available. Installing... Success? {1}' -f ("`t",$?.ToString()))
-    }
-    else {
-        Write-Output -InputObject ('{0}NuGet (Package Provider) is already installed.' -f ("`t"))
-    }
-
-
-    # Prerequirement - PowerShellGet (PowerShell Module)
-    Write-Output -InputObject ('### Prerequirement - NuGet (Package Provider)')
-    $ModulesRequired = [string[]]@('PowerShellGet')
-    foreach ($ModuleName in $ModulesRequired) {
-        Write-Output -InputObject ('{0}' -f ($ModuleName))
-        $VersionModuleAvailable = [System.Version]$(Get-ModulePublishedVersion -ModuleName $ModuleName)
-        $VersionModuleInstalled = [System.Version]$(Get-InstalledModule -Name $ModuleName -ErrorAction 'SilentlyContinue' | Select-Object -ExpandProperty 'Version')
-        if ((-not($VersionModuleInstalled)) -or $VersionModuleInstalled -lt $VersionModuleAvailable) {           
-            $null = Install-Module -Name $ModuleName -Repository 'PSGallery' -Scope 'AllUsers' -Verbose:$false -Debug:$false -Confirm:$false -Force -ErrorAction 'Stop'
+    # Prerequirements
+    if (-not($SkipPrerequirements)) {
+        # Prerequirement - NuGet (Package Provider)
+        Write-Output -InputObject ('{0}### Prerequirement - "NuGet" (Package Provider)' -f ("`r`n`r`n"))
+        $VersionNuGetMinimum   = [System.Version]$(Find-PackageProvider -Name 'NuGet' -Force -Verbose:$false -Debug:$false | Select-Object -ExpandProperty 'Version')
+        $VersionNuGetInstalled = [System.Version]$([System.Version[]]@(Get-PackageProvider -ListAvailable -Name 'NuGet' -ErrorAction 'SilentlyContinue' | Select-Object -ExpandProperty 'Version') | Sort-Object)[-1] 
+        if ((-not($VersionNuGetInstalled)) -or $VersionNuGetInstalled -lt $VersionNuGetMinimum) {        
+            $null = Install-PackageProvider 'NuGet' –Force -Verbose:$false -Debug:$false -ErrorAction 'Stop'
             Write-Output -InputObject ('{0}Not installed, or newer version available. Installing... Success? {1}' -f ("`t",$?.ToString()))
         }
         else {
-            Write-Output -InputObject ('{0}"{1}" (PowerShell Module) is already installed.' -f ("`t",$ModuleName))
+            Write-Output -InputObject ('{0}NuGet (Package Provider) is already installed.' -f ("`t"))
+        }
+
+
+        # Prerequirement - PowerShellGet (PowerShell Module)
+        Write-Output -InputObject ('### Prerequirement - NuGet (Package Provider)')
+        $ModulesRequired = [string[]]@('PowerShellGet')
+        foreach ($ModuleName in $ModulesRequired) {
+            Write-Output -InputObject ('{0}' -f ($ModuleName))
+            $VersionModuleAvailable = [System.Version]$(Get-ModulePublishedVersion -ModuleName $ModuleName)
+            $VersionModuleInstalled = [System.Version]$(Get-InstalledModule -Name $ModuleName -ErrorAction 'SilentlyContinue' | Select-Object -ExpandProperty 'Version')
+            if ((-not($VersionModuleInstalled)) -or $VersionModuleInstalled -lt $VersionModuleAvailable) {           
+                $null = Install-Module -Name $ModuleName -Repository 'PSGallery' -Scope 'AllUsers' -Verbose:$false -Debug:$false -Confirm:$false -Force -ErrorAction 'Stop'
+                Write-Output -InputObject ('{0}Not installed, or newer version available. Installing... Success? {1}' -f ("`t",$?.ToString()))
+            }
+            else {
+                Write-Output -InputObject ('{0}"{1}" (PowerShell Module) is already installed.' -f ("`t",$ModuleName))
+            }
         }
     }
 
