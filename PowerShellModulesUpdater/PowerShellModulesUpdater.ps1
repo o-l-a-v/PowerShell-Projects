@@ -11,9 +11,9 @@
 
     .NOTES
         Author:         Olav Rønnestad Birkeland
-        Version:        1.0.0.2
+        Version:        1.1.0.0
         Creation Date:  190310
-        Last Edit Date: 190313
+        Last Edit Date: 190316
 #>
 
 
@@ -27,12 +27,13 @@ if ((-not($IsAdmin)) -or ([System.Environment]::Is64BitOperatingSystem -and (-no
 else {
 #region    Settings & Variables
     # Action - What Options Would You Like To Perform
+    $InstallPrerequirements   = [bool] $false
     $InstallMissingModules    = [bool] $true
+    $InstallMissingSubModules = [bool] $true
     $InstallUpdatedModules    = [bool] $true
     $UninstallOutdatedModules = [bool] $true
     $UninstallUnwantedModules = [bool] $true
-    $SkipPrerequirements      = [bool] $true
-    
+       
     # Settings - PowerShell Output Streams
     $VerbosePreference  = 'SilentlyContinue'
     $ProgressPreference = 'SilentlyContinue'
@@ -40,12 +41,7 @@ else {
     # List of wanted modules
     $ModulesWanted = [string[]]@(
         'Az',                     # Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
-        'Az.Accounts',            # Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
-        'Az.Resources',           # Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
-        'Az.Websites',            # Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
         'Azure',                  # Used for managing Classic Azure resources/ objects.
-        'Azure.AnalysisServices', # Used for Azure Analysis Services.
-        'Azure.Storage',          # Used for Azure Storage.
         'AzureAD',                # Used for managing Azure Active Directory resources/ objects.
         'ISESteroids',            # Used for extending PowerShell ISE functionality.
         'Microsoft.Graph.Intune', # Used for managing Intune using PowerShell Graph in the backend.
@@ -56,10 +52,9 @@ else {
         'PSWindowsUpdate'         # Used for updating Windows.
     )
     
-    # List of Unwanted Modules
+    # List of Unwanted Modules - Will Remove Every Related Module, for AzureRM for instance will also search for AzureRM.*
     $ModulesUnwanted = [string[]]@(
         'AzureRM',                # (DEPRECATED, "Az" is it's successor)            Used for managing Azure Resource Manager resources/ objects
-        'AzureRM.Profile',        # (DEPRECATED, "Az" is it's successor)            Used for managing Azure Resource Manager resources/ objects
         'MSOnline',               # (DEPRECATED, "AzureAD" is it's successor)       Used for managing Microsoft Cloud Objects (Users, Groups, Devices, Domains...)
         'PartnerCenterModule'     # (DEPRECATED, "PartnerCenter" is it's successor) Used for authentication against Azure CSP Subscriptions
     )
@@ -96,7 +91,10 @@ else {
             
 
             # Do not allow to redirect. The result is a "MovedPermanently"
-            $Request.AllowAutoRedirect=$false
+            $Request.'AllowAutoRedirect' = $false
+            
+            
+            # Try to get published version number
             Try {
                 # Send the request
                 $Response = $Request.GetResponse()
@@ -105,6 +103,7 @@ else {
                 $Version = [System.Version]$($Response.GetResponseHeader('Location').Split('/')[-1])
             }
             Catch {
+                # Write warning if it failed & return blank version number.
                 Write-Warning -Message ($_.'Exception'.'Message')
                 $Version = [System.Version]$('0.0.0.0')
             }
@@ -176,6 +175,7 @@ else {
 
             # Update Modules
             :ForEachModule foreach ($Module in [PSCustomObject[]]$($Script:ModulesInstalled | Sort-Object -Property 'Name')) {
+                # Present Current Module
                 Write-Output -InputObject ('{0}/{1} {2} v{3}' -f (($C++).ToString($Digits),$CTotal,$Module.'Name',$Module.'Version'.ToString()))
 
                 # Get Latest Available Version
@@ -245,6 +245,93 @@ else {
             }
         }
     #endregion Install-ModulesMissing
+
+
+    #region    Install-SubModulesMissing
+        function Install-SubModulesMissing {
+            <#
+                .SYNAPSIS
+                    Installs Eventually Missing Submodules
+
+                .PARAMETER ModulesName
+                    String containing the name of the parent module you want to check for missing submodules.
+            #>
+            [CmdletBinding()]
+            Param()
+
+
+            # Update Installed Modules Variable if needed
+            if ((-not([bool]$($null = Get-Variable -Name 'ModulesInstalledNeedsRefresh' -Scope 'Script' -ErrorAction 'SilentlyContinue';$?))) -or $Script:ModulesInstalledNeedsRefresh) {
+                Get-ModulesInstalled
+            }
+
+
+            # Skip if no installed modules was found
+            if ($Script:ModulesInstalled.Count -le 0) {
+                Write-Output -InputObject ('No installed modules where found, no modules to check against.')
+                Break
+            }
+
+
+            # Help Variables - Both Foreach
+            $ModulesInstalledNames       = [string[]]$($Script:ModulesInstalled | Select-Object -ExpandProperty 'Name' | Sort-Object)
+            $ParentModulesInstalledNames = [string[]]$($ModulesInstalledNames | Where-Object -FilterScript {$_ -notlike '*.*'} | Sort-Object)
+            
+
+            # Help Variables - Outer Foreach
+            $OC = [uint16]$(1)
+            $OCTotal = [string]$($ParentModulesInstalledNames.Count.ToString())
+            $ODigits = [string]$('0' * $OCTotal.Length)
+
+
+            # Loop Through All Installed Modules
+            :ForEachModule foreach ($ModuleName in $ParentModulesInstalledNames) {
+                # Present Current Module
+                Write-Output -InputObject ('{0}/{1} {2}' -f (($OC++).ToString($ODigits),$OCTotal,$ModuleName))
+                
+
+                # Get all installed sub modules
+                $SubModulesInstalled = [string[]]$($ModulesInstalledNames | Where-Object -FilterScript {$_ -like ('{0}.*' -f ($ModuleName))} | Sort-Object)
+
+
+                # Get all available sub modules
+                $SubModulesAvailable = [string[]]$(Find-Module -Name ('{0}.*' -f ($ModuleName)) | Select-Object -ExpandProperty 'Name' | Sort-Object)
+
+
+                # If either $SubModulesAvailable is 0, Continue Outer Foreach
+                if ($SubModulesAvailable.Count -eq 0) {
+                    Write-Output -InputObject ('{0}Found {1} avilable sub module{2}.' -f ("`t",$SubModulesAvailable.Count.ToString(),[string]$(if($SubModulesAvailable.Count -ne 1){'s'})))
+                    Continue ForEachModule
+                }
+
+
+                # Compare objects to see which are missing
+                $SubModulesMissing = [string[]]$(if($SubModulesInstalled.Count -eq 0){$SubModulesAvailable}else{Compare-Object -ReferenceObject $SubModulesInstalled -DifferenceObject $SubModulesAvailable -PassThru})
+                Write-Output -InputObject ('{0}Found {1} missing sub module{2}.' -f ("`t",$SubModulesMissing.Count.ToString(),[string]$(if($SubModulesMissing.Count -ne 1){'s'})))
+
+
+                # Install missing sub modules
+                if ($SubModulesMissing.Count -gt 0) {
+                    # Help Variables - Inner Foreach
+                    $IC = [uint16]$(1)
+                    $ICTotal = [string]$($SubModulesMissing.Count.ToSTring())
+                    $IDigits = [string]$('0' * $ICTotal.Length)
+    
+                    # Install Modules
+                    :ForEachSubModule foreach ($SubModuleName in $SubModulesMissing) {
+                        # Present Current Sub Module
+                        Write-Output -InputObject ('{0}{1}/{2} {3}' -f ([string]$("`t" * 2),($IC++).ToString($IDigits),$ICTotal,$SubModuleName))
+
+                        # Install The Missing Sub Module
+                        Install-Module -Name $SubModuleName -Confirm:$false -Scope 'AllUsers' -AllowClobber -Verbose:$false -Debug:$false -Force
+                        $Success = [bool]$($?)
+                        Write-Output -InputObject ('{0}Install success? {1}' -f ([string]$("`t" * 3),$Success.ToString()))
+                        if ($Success) {$Script:ModulesInstalledNeedsRefresh = $true}
+                    }
+                }
+            }
+        }
+    #endregion Install-SubModulesMissing
 
 
     #region    Uninstall-ModulesOutdated
@@ -336,7 +423,7 @@ else {
 
             # Skip if no installed modules was found
             if ($Script:ModulesInstalled.Count -le 0) {
-                Write-Output -InputObject ('No installed modules where found, no modules to update.')
+                Write-Output -InputObject ('No installed modules where found, no modules to uninstall.')
                 Break
             }
 
@@ -392,7 +479,7 @@ else {
 
 #region    Main
     # Start Time
-    New-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'TimeTotalStart'       -Value ([datetime]$([datetime]::Now))
+    New-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'TimeTotalStart' -Value ([datetime]$([datetime]::Now))
     
 
     # Check that same module is not specified in both $ModulesWanted and $ModulesUnwanted
@@ -402,9 +489,10 @@ else {
     
   
     # Prerequirements
-    if (-not($SkipPrerequirements)) {
+    Write-Output -InputObject ('{0}{0}Install Prerequirements.' -f ("`t"))
+    if ($InstallPrerequirements) {
         # Prerequirement - NuGet (Package Provider)
-        Write-Output -InputObject ('{0}### Prerequirement - "NuGet" (Package Provider)' -f ("`r`n`r`n"))
+        Write-Output -InputObject ('{0}# Prerequirement - "NuGet" (Package Provider)' -f ("`r`n`r`n"))
         $VersionNuGetMinimum   = [System.Version]$(Find-PackageProvider -Name 'NuGet' -Force -Verbose:$false -Debug:$false | Select-Object -ExpandProperty 'Version')
         $VersionNuGetInstalled = [System.Version]$([System.Version[]]@(Get-PackageProvider -ListAvailable -Name 'NuGet' -ErrorAction 'SilentlyContinue' | Select-Object -ExpandProperty 'Version') | Sort-Object)[-1] 
         if ((-not($VersionNuGetInstalled)) -or $VersionNuGetInstalled -lt $VersionNuGetMinimum) {        
@@ -417,7 +505,7 @@ else {
 
 
         # Prerequirement - PowerShellGet (PowerShell Module)
-        Write-Output -InputObject ('### Prerequirement - NuGet (Package Provider)')
+        Write-Output -InputObject ('# Prerequirement - NuGet (Package Provider)')
         $ModulesRequired = [string[]]@('PowerShellGet')
         foreach ($ModuleName in $ModulesRequired) {
             Write-Output -InputObject ('{0}' -f ($ModuleName))
@@ -431,6 +519,9 @@ else {
                 Write-Output -InputObject ('{0}"{1}" (PowerShell Module) is already installed.' -f ("`t",$ModuleName))
             }
         }
+    }
+    else {
+        Write-Output -InputObject ('{0}Install Prerequirements is set to $false.' -f ("`t"))
     }
 
 
@@ -461,6 +552,16 @@ else {
     }
     else {
         Write-Output -InputObject ('{0}Install Missing Modules is set to $false.' -f ("`t"))
+    }
+
+
+    # Installing Missing Sub Modules
+    Write-Output -InputObject ('{0}### Install Missing Sub Modules' -f ("`r`n`r`n"))
+    if ($InstallMissingModules) {
+        Install-SubModulesMissing
+    }
+    else {
+        Write-Output -InputObject ('{0}Install Missing Sub Modules is set to $false.' -f ("`t"))
     }
 
 
