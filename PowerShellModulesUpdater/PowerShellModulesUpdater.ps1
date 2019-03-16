@@ -489,7 +489,7 @@ else {
     
   
     # Prerequirements
-    Write-Output -InputObject ('{0}{0}Install Prerequirements.' -f ("`t"))
+    Write-Output -InputObject ('## Install Prerequirements.')
     if ($InstallPrerequirements) {
         # Prerequirement - NuGet (Package Provider)
         Write-Output -InputObject ('{0}# Prerequirement - "NuGet" (Package Provider)' -f ("`r`n`r`n"))
