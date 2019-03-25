@@ -11,9 +11,9 @@
 
     .NOTES
         Author:         Olav Rønnestad Birkeland
-        Version:        1.1.0.0
+        Version:        1.2.0.0
         Creation Date:  190310
-        Last Edit Date: 190316
+        Last Edit Date: 190324
 #>
 
 
@@ -40,16 +40,19 @@ else {
 
     # List of wanted modules
     $ModulesWanted = [string[]]@(
-        'Az',                     # Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
-        'Azure',                  # Used for managing Classic Azure resources/ objects.
-        'AzureAD',                # Used for managing Azure Active Directory resources/ objects.
-        'ISESteroids',            # Used for extending PowerShell ISE functionality.
-        'Microsoft.Graph.Intune', # Used for managing Intune using PowerShell Graph in the backend.
-        'PartnerCenter',          # Used for authentication against Azure CSP Subscriptions.
-        'PackageManagement',      # Used for installing/ uninstalling modules.
-        'PolicyFileEditor',       # Used for local group policy / gpedit.msc.
-        'PowerShellGet',          # Used for installing updates.
-        'PSWindowsUpdate'         # Used for updating Windows.
+        'Az',                     # Microsoft. Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
+        'Azure',                  # Microsoft. Used for managing Classic Azure resources/ objects.        
+        'AzureAD',                # Microsoft. Used for managing Azure Active Directory resources/ objects.
+        'IntuneBackupAndRestore', # John Seerden. Uses "MSGraphFunctions" module to backup and restore Intune config.
+        'ISESteroids',            # Power The Shell, ISE Steroids. Used for extending PowerShell ISE functionality.
+        'Microsoft.Graph.Intune', # Microsoft. Used for managing Intune using PowerShell Graph in the backend.
+        'MSGraphFunctions',       # John Seerden. Wrapper for Microsoft Graph Rest API.
+        'PartnerCenter',          # Microsoft. Used for authentication against Azure CSP Subscriptions.
+        'PackageManagement',      # Microsoft. Used for installing/ uninstalling modules.
+        'PolicyFileEditor',       # Microsoft. Used for local group policy / gpedit.msc.
+        'PowerShellGet',          # Microsoft. Used for installing updates.
+        'PSScriptAnalyzer',       # Microsoft. Used to analyze PowerShell scripts to look for common mistakes + give advice.
+        'PSWindowsUpdate'         # Michal Gajda. Used for updating Windows.
     )
     
     # List of Unwanted Modules - Will Remove Every Related Module, for AzureRM for instance will also search for AzureRM.*
@@ -239,7 +242,7 @@ else {
                     Write-Output -InputObject ('{0}Not already installed. Installing.' -f ("`t"))
                     Install-Module -Name $ModuleWanted -Confirm:$false -Scope 'AllUsers' -AllowClobber -Verbose:$false -Debug:$false -Force
                     $Success = [bool]$($?)
-                    Write-Output -InputObject ('{0}{0}Success? {0}' -f ("`t",$Success.ToString))
+                    Write-Output -InputObject ('{0}{0}Success? {0}' -f ("`t",$Success.ToString()))
                     if ($Success) {$Script:ModulesInstalledNeedsRefresh = $true}
                 }
             }
@@ -489,7 +492,7 @@ else {
     
   
     # Prerequirements
-    Write-Output -InputObject ('## Install Prerequirements.')
+    Write-Output -InputObject ('### Install Prerequirements.')
     if ($InstallPrerequirements) {
         # Prerequirement - NuGet (Package Provider)
         Write-Output -InputObject ('{0}# Prerequirement - "NuGet" (Package Provider)' -f ("`r`n`r`n"))

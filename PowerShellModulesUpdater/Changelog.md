@@ -1,4 +1,14 @@
 # Changelog
+## v1.2.0.0 190324
+* Bugfixes
+	* Missed a "#" on one of the output headings
+	* Install missing modules: Success status after install would not display.
+* Additions
+	* Added three new modules
+		* IntuneBackupAndRestore. John Seerden. Uses "MSGraphFunctions" module to backup and restore Intune config.
+		* MSGraphFunctions. John Seerden. Wrapper for Microsoft Graph Rest API.
+		* PSScriptAnalyzer. Microsoft. Used to analyze PowerShell scripts to look for common mistakes + give advice.
+
 ## v1.1.0.0 190316
 * Bugfixes
 * Added ability to check for and install missing submodules.
