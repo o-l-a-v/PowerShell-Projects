@@ -1,4 +1,4 @@
-﻿#Requires -RunAsAdministrator
+﻿#Requires -Version 5.1 -RunAsAdministrator
 <#
     .NAME
         PowerShellModulesUpdater.ps1
@@ -11,9 +11,9 @@
 
     .NOTES
         Author:         Olav Rønnestad Birkeland
-        Version:        1.2.0.0
+        Version:        1.2.0.1
         Creation Date:  190310
-        Last Edit Date: 190324
+        Last Edit Date: 190331
 #>
 
 
@@ -560,7 +560,7 @@ else {
 
     # Installing Missing Sub Modules
     Write-Output -InputObject ('{0}### Install Missing Sub Modules' -f ("`r`n`r`n"))
-    if ($InstallMissingModules) {
+    if ($InstallMissingSubModules) {
         Install-SubModulesMissing
     }
     else {

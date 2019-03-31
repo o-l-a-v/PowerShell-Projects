@@ -1,4 +1,8 @@
 # Changelog
+## v1.2.0.1 190331
+* Bugfixes
+	* Used "$InstallMissingModules" instead of "$InstallMissingSubModules" for controlling weather the script should add missing sumodules. Type'o.
+
 ## v1.2.0.0 190324
 * Bugfixes
 	* Missed a "#" on one of the output headings
