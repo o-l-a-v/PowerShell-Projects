@@ -11,9 +11,9 @@
 
     .NOTES
         Author:         Olav Rønnestad Birkeland
-        Version:        1.2.0.1
+        Version:        1.3.0.0
         Creation Date:  190310
-        Last Edit Date: 190331
+        Last Edit Date: 190401
 #>
 
 
@@ -174,24 +174,29 @@ else {
             $C = [uint16]$(1)
             $CTotal = [string]$($Script:ModulesInstalled.Count)
             $Digits = [string]$('0' * $CTotal.Length)
+            $ModulesInstalledNames = [string[]]$($Script:ModulesInstalled | Select-Object -ExpandProperty 'Name')
 
 
             # Update Modules
-            :ForEachModule foreach ($Module in [PSCustomObject[]]$($Script:ModulesInstalled | Sort-Object -Property 'Name')) {
-                # Present Current Module
-                Write-Output -InputObject ('{0}/{1} {2} v{3}' -f (($C++).ToString($Digits),$CTotal,$Module.'Name',$Module.'Version'.ToString()))
-
+            :ForEachModule foreach ($Module in [PSCustomObject[]]$($Script:ModulesInstalled | Sort-Object -Property 'Name')) {                
                 # Get Latest Available Version
                 $VersionAvailable = [System.Version]$(Get-ModulePublishedVersion -ModuleName $Module.'Name')
+                
+                # Get Version Installed - Get Fresh Version Number if current module is a sub module
+                $VersionInstalled = [System.Version]$(if([System.Version]$($VersionAvailable) -gt [System.Version]$($Module.'Version') -and $Module.'Name' -like '*.*' -and [string[]]$($ModulesInstalledNames) -contains [string]$($Module.'Name'.Replace(('.{0}' -f ($Module.'Name'.Split('.')[-1])),''))) {
+                    [System.Version[]]$(Get-InstalledModule -Name $Module.'Name' -AllVersions | Select-Object -ExpandProperty 'Version') | Sort-Object -Descending | Select-Object -First 1}else{$Module.'Version'})
+                
+                # Present Current Module
+                Write-Output -InputObject ('{0}/{1} {2} v{3}' -f (($C++).ToString($Digits),$CTotal,$Module.'Name',$VersionInstalled.ToString()))
 
                 # Compare Version Installed vs Version Available
-                if ($Module.'Version' -ge $VersionAvailable) {
-                    Write-Output -InputObject ('{0}Current verion is latest version.' -f ("`t"))
+                if ($VersionInstalled -ge $VersionAvailable) {
+                    Write-Output -InputObject ('{0}Current version is latest version.' -f ("`t"))
                     Continue ForEachModule
                 }
-                else {
-                    Write-Output -InputObject ('{0}Newer version is available. Installing v{1}.' -f ("`t",$VersionAvailable.ToString()))
-                    Install-Module -Name $Module.'Name' -Confirm:$false -Scope 'AllUsers' -AllowClobber -Verbose:$false -Debug:$false -Force
+                else {               
+                    Write-Output -InputObject ('{0}Newer version available. Installing v{1}.' -f ("`t",$VersionAvailable.ToString()))               
+                    Install-Module -Name $Module.'Name' -Confirm:$false -Scope 'AllUsers' -RequiredVersion $VersionAvailable -AllowClobber -Verbose:$false -Debug:$false -Force
                     $Success = [bool]$($?)
                     Write-Output -InputObject ('{0}{0}Success? {0}' -f ("`t",$Success.ToString))
                     if ($Success) {$Script:ModulesInstalledNeedsRefresh = $true}
@@ -278,7 +283,7 @@ else {
 
             # Help Variables - Both Foreach
             $ModulesInstalledNames       = [string[]]$($Script:ModulesInstalled | Select-Object -ExpandProperty 'Name' | Sort-Object)
-            $ParentModulesInstalledNames = [string[]]$($ModulesInstalledNames | Where-Object -FilterScript {$_ -notlike '*.*'} | Sort-Object)
+            $ParentModulesInstalledNames = [string[]]$($ModulesInstalledNames | Where-Object -FilterScript {$_ -notlike '*.*' -or ($_ -like '*.*' -and [string[]]$($ModulesInstalledNames) -notcontains [string]$($_.Replace(('.{0}' -f ($_.Split('.')[-1])),'')))})
             
 
             # Help Variables - Outer Foreach
@@ -484,6 +489,8 @@ else {
     # Start Time
     New-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'TimeTotalStart' -Value ([datetime]$([datetime]::Now))
     
+    # Set Script Scope Variables
+    $Script:ModulesInstalledNeedsRefresh = [bool]$($true)
 
     # Check that same module is not specified in both $ModulesWanted and $ModulesUnwanted
     if (($ModulesWanted | Where-Object -FilterScript {$ModulesUnwanted -contains $_}).Count -ge 1) {

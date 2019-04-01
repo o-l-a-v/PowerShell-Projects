@@ -1,4 +1,12 @@
 # Changelog
+## v1.3.0.0 190401
+* Bugfixes
+	* Install-MissingSubModules
+		* Used punctuation as check weather a module was a sub module. This does not work for "Microsoft.Graph.Intune" for instance. Now it removes the last punctuation and name, and checks weather this name exist in the list of installed modules.
+* Additions
+	* UpdateInstalledModules
+		* If a submodule, punctuation in the name, will check once again what version is installed, in case parent module updated it.
+
 ## v1.2.0.1 190331
 * Bugfixes
 	* Used "$InstallMissingModules" instead of "$InstallMissingSubModules" for controlling weather the script should add missing sumodules. Type'o.
