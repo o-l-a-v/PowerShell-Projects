@@ -1,4 +1,11 @@
 # Changelog
+## v1.3.1.0 190404
+* Bugfixes
+	* Would fail on a clean install of Windows 10, fixed now
+* Additions
+	* Added modules
+		* ImportExcel, can be used to import/modify/export to/from Excel files
+
 ## v1.3.0.0 190401
 * Bugfixes
 	* Install-MissingSubModules

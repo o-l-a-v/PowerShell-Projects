@@ -9,11 +9,17 @@
     .DESCRIPTION
         Updates, installs and removes PowerShell modules on your system based on settings in the "Settings & Variables" region.
 
+        How to use:
+            1. Remember to allow script execution!
+                Set-ExecutionPolicy -ExecutionPolicy 'Unrestricted' -Scope 'CurrentUser' -Force -Confirm:$false
+            2. Remember to enable "$InstallPrerequirements" for your first run
+                $InstallPrerequirements = [bool]$($true)
+
     .NOTES
         Author:         Olav Rønnestad Birkeland
-        Version:        1.3.0.0
+        Version:        1.3.1.0
         Creation Date:  190310
-        Last Edit Date: 190401
+        Last Edit Date: 190404
 #>
 
 
@@ -27,7 +33,7 @@ if ((-not($IsAdmin)) -or ([System.Environment]::Is64BitOperatingSystem -and (-no
 else {
 #region    Settings & Variables
     # Action - What Options Would You Like To Perform
-    $InstallPrerequirements   = [bool] $false
+    $InstallPrerequirements   = [bool] $true
     $InstallMissingModules    = [bool] $true
     $InstallMissingSubModules = [bool] $true
     $InstallUpdatedModules    = [bool] $true
@@ -43,6 +49,7 @@ else {
         'Az',                     # Microsoft. Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
         'Azure',                  # Microsoft. Used for managing Classic Azure resources/ objects.        
         'AzureAD',                # Microsoft. Used for managing Azure Active Directory resources/ objects.
+        'ImportExcel',            # dfinke. Used for import/export to Excel.
         'IntuneBackupAndRestore', # John Seerden. Uses "MSGraphFunctions" module to backup and restore Intune config.
         'ISESteroids',            # Power The Shell, ISE Steroids. Used for extending PowerShell ISE functionality.
         'Microsoft.Graph.Intune', # Microsoft. Used for managing Intune using PowerShell Graph in the backend.
@@ -502,7 +509,7 @@ else {
     Write-Output -InputObject ('### Install Prerequirements.')
     if ($InstallPrerequirements) {
         # Prerequirement - NuGet (Package Provider)
-        Write-Output -InputObject ('{0}# Prerequirement - "NuGet" (Package Provider)' -f ("`r`n`r`n"))
+        Write-Output -InputObject ('# Prerequirement - "NuGet" (Package Provider)' -f ("`r`n`r`n"))
         $VersionNuGetMinimum   = [System.Version]$(Find-PackageProvider -Name 'NuGet' -Force -Verbose:$false -Debug:$false | Select-Object -ExpandProperty 'Version')
         $VersionNuGetInstalled = [System.Version]$([System.Version[]]@(Get-PackageProvider -ListAvailable -Name 'NuGet' -ErrorAction 'SilentlyContinue' | Select-Object -ExpandProperty 'Version') | Sort-Object)[-1] 
         if ((-not($VersionNuGetInstalled)) -or $VersionNuGetInstalled -lt $VersionNuGetMinimum) {        
@@ -515,15 +522,20 @@ else {
 
 
         # Prerequirement - PowerShellGet (PowerShell Module)
-        Write-Output -InputObject ('# Prerequirement - NuGet (Package Provider)')
+        Write-Output -InputObject ('{0}# Prerequirement - NuGet (Package Provider)' -f ("`r`n"))
         $ModulesRequired = [string[]]@('PowerShellGet')
         foreach ($ModuleName in $ModulesRequired) {
             Write-Output -InputObject ('{0}' -f ($ModuleName))
             $VersionModuleAvailable = [System.Version]$(Get-ModulePublishedVersion -ModuleName $ModuleName)
             $VersionModuleInstalled = [System.Version]$(Get-InstalledModule -Name $ModuleName -ErrorAction 'SilentlyContinue' | Select-Object -ExpandProperty 'Version')
             if ((-not($VersionModuleInstalled)) -or $VersionModuleInstalled -lt $VersionModuleAvailable) {           
-                $null = Install-Module -Name $ModuleName -Repository 'PSGallery' -Scope 'AllUsers' -Verbose:$false -Debug:$false -Confirm:$false -Force -ErrorAction 'Stop'
-                Write-Output -InputObject ('{0}Not installed, or newer version available. Installing... Success? {1}' -f ("`t",$?.ToString()))
+                Write-Output -InputObject ('{0}Not installed, or newer version available. Installing...' -f ("`t"))
+                $null = Install-Module -Name $ModuleName -Scope 'AllUsers' -Verbose:$false -Debug:$false -Confirm:$false -Force -ErrorAction 'Stop'
+                $Success = [bool]$($?)
+                Write-Output -InputObject ('{0}{0}Success? {1}' -f ("`t",$Success.ToString()))
+                if ($Success) {
+                    $null = Import-Module -Name $ModuleName -RequiredVersion $VersionModuleAvailable -Force -ErrorAction 'Stop'
+                }
             }
             else {
                 Write-Output -InputObject ('{0}"{1}" (PowerShell Module) is already installed.' -f ("`t",$ModuleName))
