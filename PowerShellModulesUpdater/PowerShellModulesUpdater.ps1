@@ -504,6 +504,7 @@ else {
         Throw ('ERROR - Same module(s) are specified in both $ModulesWanted and $ModulesUnwanted.')
     }
     
+
   
     # Prerequirements
     Write-Output -InputObject ('### Install Prerequirements.')
@@ -547,6 +548,14 @@ else {
     }
 
 
+
+    # Only continue if PowerShellGet is installed
+    if (-not([bool]$($null = Import-Module -Name 'PowerShellGet' -Force -ErrorAction 'SilentlyContinue';$?))) {
+        Throw 'ERROR: PowerShell module "PowerShellGet" is required to continue.'
+    }
+
+
+
     # Uninstall Unwanted Modules
     Write-Output -InputObject ('{0}### Uninstall Unwanted Modules' -f ("`r`n`r`n"))
     if ($UninstallUnwantedModules) {
@@ -557,6 +566,7 @@ else {
     }
     
 
+
     # Update Installed Modules
     Write-Output -InputObject ('{0}### Update Installed Modules' -f ("`r`n`r`n"))
     if ($InstallUpdatedModules) {
@@ -565,6 +575,7 @@ else {
     else {
         Write-Output -InputObject ('{0}Update Installed Modules is set to $false.' -f ("`t"))
     }
+
 
 
     # Install Missing Modules
@@ -577,6 +588,7 @@ else {
     }
 
 
+
     # Installing Missing Sub Modules
     Write-Output -InputObject ('{0}### Install Missing Sub Modules' -f ("`r`n`r`n"))
     if ($InstallMissingSubModules) {
@@ -587,6 +599,7 @@ else {
     }
 
 
+
     # Remove old modules
     Write-Output -InputObject ('{0}### Remove Outdated Modules' -f ("`r`n`r`n"))
     if ($UninstallOutdatedModules) {
@@ -595,6 +608,7 @@ else {
     else {
         Write-Output -InputObject ('{0}Remove Outdated Modules is set to $false.' -f ("`t"))
     }
+
 
 
     # Write Stats
