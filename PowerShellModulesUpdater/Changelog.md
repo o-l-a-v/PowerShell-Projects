@@ -1,4 +1,8 @@
 # Changelog
+## v1.3.2.0 190503
+* Additions
+	* Added check for Execution Policy, will attempt to fix it if necessary by setting it to "Unrestricted" just for current process.
+
 ## v1.3.1.0 190404
 * Bugfixes
 	* Would fail on a clean install of Windows 10, fixed now

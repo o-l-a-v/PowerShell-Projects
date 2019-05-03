@@ -17,10 +17,11 @@
 
     .NOTES
         Author:         Olav Rønnestad Birkeland
-        Version:        1.3.1.0
+        Version:        1.3.2.0
         Creation Date:  190310
-        Last Edit Date: 190404
+        Last Edit Date: 190503
 #>
+
 
 
 # Only continue if running as Admin, and if 64 bit OS => Running 64 bit PowerShell
@@ -33,7 +34,7 @@ if ((-not($IsAdmin)) -or ([System.Environment]::Is64BitOperatingSystem -and (-no
 else {
 #region    Settings & Variables
     # Action - What Options Would You Like To Perform
-    $InstallPrerequirements   = [bool] $true
+    $InstallPrerequirements   = [bool] $false
     $InstallMissingModules    = [bool] $true
     $InstallMissingSubModules = [bool] $true
     $InstallUpdatedModules    = [bool] $true
@@ -49,11 +50,12 @@ else {
         'Az',                     # Microsoft. Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
         'Azure',                  # Microsoft. Used for managing Classic Azure resources/ objects.        
         'AzureAD',                # Microsoft. Used for managing Azure Active Directory resources/ objects.
-        'ImportExcel',            # dfinke. Used for import/export to Excel.
+        'ImportExcel',            # dfinke.    Used for import/export to Excel.
         'IntuneBackupAndRestore', # John Seerden. Uses "MSGraphFunctions" module to backup and restore Intune config.
         'ISESteroids',            # Power The Shell, ISE Steroids. Used for extending PowerShell ISE functionality.
         'Microsoft.Graph.Intune', # Microsoft. Used for managing Intune using PowerShell Graph in the backend.
         'MSGraphFunctions',       # John Seerden. Wrapper for Microsoft Graph Rest API.
+        'MSOnline',               # (DEPRECATED, "AzureAD" is it's successor)       Used for managing Microsoft Cloud Objects (Users, Groups, Devices, Domains...)
         'PartnerCenter',          # Microsoft. Used for authentication against Azure CSP Subscriptions.
         'PackageManagement',      # Microsoft. Used for installing/ uninstalling modules.
         'PolicyFileEditor',       # Microsoft. Used for local group policy / gpedit.msc.
@@ -64,8 +66,7 @@ else {
     
     # List of Unwanted Modules - Will Remove Every Related Module, for AzureRM for instance will also search for AzureRM.*
     $ModulesUnwanted = [string[]]@(
-        'AzureRM',                # (DEPRECATED, "Az" is it's successor)            Used for managing Azure Resource Manager resources/ objects
-        'MSOnline',               # (DEPRECATED, "AzureAD" is it's successor)       Used for managing Microsoft Cloud Objects (Users, Groups, Devices, Domains...)
+        'AzureRM',                # (DEPRECATED, "Az" is it's successor)            Used for managing Azure Resource Manager resources/ objects        
         'PartnerCenterModule'     # (DEPRECATED, "PartnerCenter" is it's successor) Used for authentication against Azure CSP Subscriptions
     )
 #endregion Settings & Variables
@@ -500,12 +501,17 @@ else {
     $Script:ModulesInstalledNeedsRefresh = [bool]$($true)
 
     # Check that same module is not specified in both $ModulesWanted and $ModulesUnwanted
-    if (($ModulesWanted | Where-Object -FilterScript {$ModulesUnwanted -contains $_}).Count -ge 1) {
+    if (($ModulesWanted | Where-Object -FilterScript {$ModulesUnwanted -contains $_}).'Count' -ge 1) {
         Throw ('ERROR - Same module(s) are specified in both $ModulesWanted and $ModulesUnwanted.')
     }
     
+    # Set ExecutionPolicy if needed
+    if ([string[]]$('AllSigned','Default','Restricted','Undefined') -contains [string]$([Microsoft.PowerShell.ExecutionPolicy]$(Get-ExecutionPolicy).ToString())) {
+        $null = Set-ExecutionPolicy -Scope 'Process' -ExecutionPolicy 'Unrestricted' -Confirm:$false -Force -ErrorAction 'Stop'
+    }
 
-  
+
+
     # Prerequirements
     Write-Output -InputObject ('### Install Prerequirements.')
     if ($InstallPrerequirements) {
@@ -549,7 +555,7 @@ else {
 
 
 
-    # Only continue if PowerShellGet is installed
+    # Only continue if PowerShellGet is installed and can be imported successfully
     if (-not([bool]$($null = Import-Module -Name 'PowerShellGet' -Force -ErrorAction 'SilentlyContinue';$?))) {
         Throw 'ERROR: PowerShell module "PowerShellGet" is required to continue.'
     }
