@@ -1,4 +1,17 @@
 # Changelog
+## v1.3.4.0 190616
+* Additions
+	* Better handling of uninstalling PackageManagement if module is updated during current session.
+		* If PackageManagement was updated during the same session, PowerShell must be closed and reopened before outdated version can be removed.
+	* Will make sure that the user does not try to uninstall "PackageManagement" or "PowerShellGet".
+
+## v1.3.3.0 190524
+* Bugfixes
+	* Uninstall unwanted modules did not find any modules because the script scoped variable for installed modules is not just keeping the name of the modules anymore. Fixed with a Select-Object.
+	* Other bugfixes since last release, lots of small stuff I don't remember. Nothing major.
+* Speedups
+	* Better logic in the update installed modules function when a parent module is updated and submodules might have been updated aswell.
+
 ## v1.3.2.0 190503
 * Additions
 	* Added check for Execution Policy, will attempt to fix it if necessary by setting it to "Unrestricted" just for current process.
