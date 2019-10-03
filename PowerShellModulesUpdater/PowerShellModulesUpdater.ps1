@@ -12,8 +12,10 @@
         How to use:
             1. Remember to allow script execution!
                 Set-ExecutionPolicy -ExecutionPolicy 'Unrestricted' -Scope 'CurrentUser' -Force -Confirm:$false
-            2. Remember to enable "$InstallPrerequirements" for your first run
-                $InstallPrerequirements = [bool]$($true)
+            2. Some modules requires you to accept a license. This can be passed as a parameter to "Install-Module".
+               Set $AcceptLicenses to $true (default) if you want these modules to be installed as well. 
+               Some modules that requires $AcceptLicenses to be $true:
+                   * Az.ApplicationMonitor
 
         Requirements
             * Package Providers
@@ -24,9 +26,9 @@
 
     .NOTES
         Author:         Olav Rønnestad Birkeland
-        Version:        1.3.4.0
+        Version:        1.4.1.0
         Creation Date:  190310
-        Last Edit Date: 190616
+        Last Edit Date: 190808
 #>
 
 
@@ -40,8 +42,10 @@ if ((-not($IsAdmin)) -or ([System.Environment]::Is64BitOperatingSystem -and (-no
 
 else {
 #region    Settings & Variables
+    # Accept licenses
+    $AcceptLicenses           = [bool] $true
+    
     # Action - What Options Would You Like To Perform
-    $InstallPrerequirements   = [bool] $false
     $InstallMissingModules    = [bool] $true
     $InstallMissingSubModules = [bool] $true
     $InstallUpdatedModules    = [bool] $true
@@ -57,6 +61,7 @@ else {
         'Az',                                     # Microsoft. Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
         'Azure',                                  # Microsoft. Used for managing Classic Azure resources/ objects.        
         'AzureAD',                                # Microsoft. Used for managing Azure Active Directory resources/ objects.
+        'AzureADPreview',                         # -^-
         'GetBIOS',                                # Damien Van Robaeys. Used for getting BIOS settings for Lenovo, Dell and HP.
         'ImportExcel',                            # dfinke.    Used for import/export to Excel.
         'IntuneBackupAndRestore',                 # John Seerden. Uses "MSGraphFunctions" module to backup and restore Intune config.
@@ -219,7 +224,7 @@ else {
                 }
                 else {               
                     Write-Output -InputObject ('{0}Newer version available. Installing v{1}.' -f ("`t",$VersionAvailable.ToString()))               
-                    Install-Module -Name $ModuleName -Confirm:$false -Scope 'AllUsers' -RequiredVersion $VersionAvailable -AllowClobber -Verbose:$false -Debug:$false -Force
+                    Install-Module -Name $ModuleName -Confirm:$false -Scope 'AllUsers' -RequiredVersion $VersionAvailable -AllowClobber -AcceptLicense:$AcceptLicenses -Verbose:$false -Debug:$false -Force
                     $Success = [bool]$($?)
                     Write-Output -InputObject ('{0}{0}Success? {0}' -f ("`t",$Success.ToString))
                     if ($Success) {
@@ -277,7 +282,7 @@ else {
                 }
                 else {
                     Write-Output -InputObject ('{0}Not already installed. Installing.' -f ("`t"))
-                    Install-Module -Name $ModuleWanted -Confirm:$false -Scope 'AllUsers' -AllowClobber -Verbose:$false -Debug:$false -Force
+                    Install-Module -Name $ModuleWanted -Confirm:$false -Scope 'AllUsers' -AllowClobber -AcceptLicense:$AcceptLicenses -Verbose:$false -Debug:$false -Force
                     $Success = [bool]$($?)
                     Write-Output -InputObject ('{0}{0}Success? {1}' -f ("`t",$Success.ToString()))
                     if ($Success) {$Script:ModulesInstalledNeedsRefresh = $true}
@@ -320,8 +325,8 @@ else {
 
             # Help Variables - Outer Foreach
             $OC = [uint16]$(1)
-            $OCTotal = [string]$($ParentModulesInstalledNames.Count.ToString())
-            $ODigits = [string]$('0' * $OCTotal.Length)
+            $OCTotal = [string]$($ParentModulesInstalledNames.'Count'.ToString())
+            $ODigits = [string]$('0' * $OCTotal.'Length')
 
 
             # Loop Through All Installed Modules
@@ -339,14 +344,14 @@ else {
 
 
                 # If either $SubModulesAvailable is 0, Continue Outer Foreach
-                if ($SubModulesAvailable.Count -eq 0) {
-                    Write-Output -InputObject ('{0}Found {1} avilable sub module{2}.' -f ("`t",$SubModulesAvailable.Count.ToString(),[string]$(if($SubModulesAvailable.Count -ne 1){'s'})))
+                if ($SubModulesAvailable.'Count' -eq 0) {
+                    Write-Output -InputObject ('{0}Found {1} avilable sub module{2}.' -f ("`t",$SubModulesAvailable.'Count'.ToString(),[string]$(if($SubModulesAvailable.'Count' -ne 1){'s'})))
                     Continue ForEachModule
                 }
 
 
                 # Compare objects to see which are missing
-                $SubModulesMissing = [string[]]$(if($SubModulesInstalled.Count -eq 0){$SubModulesAvailable}else{Compare-Object -ReferenceObject $SubModulesInstalled -DifferenceObject $SubModulesAvailable -PassThru})
+                $SubModulesMissing = [string[]]$(if($SubModulesInstalled.'Count' -eq 0){$SubModulesAvailable}else{Compare-Object -ReferenceObject $SubModulesInstalled -DifferenceObject $SubModulesAvailable -PassThru})
                 Write-Output -InputObject ('{0}Found {1} missing sub module{2}.' -f ("`t",$SubModulesMissing.Count.ToString(),[string]$(if($SubModulesMissing.Count -ne 1){'s'})))
 
 
@@ -363,7 +368,7 @@ else {
                         Write-Output -InputObject ('{0}{1}/{2} {3}' -f ([string]$("`t" * 2),($IC++).ToString($IDigits),$ICTotal,$SubModuleName))
 
                         # Install The Missing Sub Module
-                        Install-Module -Name $SubModuleName -Confirm:$false -Scope 'AllUsers' -AllowClobber -Verbose:$false -Debug:$false -Force
+                        Install-Module -Name $SubModuleName -Confirm:$false -Scope 'AllUsers' -AllowClobber -AcceptLicense:$AcceptLicenses -Verbose:$false -Debug:$false -Force
                         $Success = [bool]$($?)
                         Write-Output -InputObject ('{0}Install success? {1}' -f ([string]$("`t" * 3),$Success.ToString()))
                         if ($Success) {$Script:ModulesInstalledNeedsRefresh = $true}
@@ -549,17 +554,15 @@ else {
     if ([byte]$([string[]]$([string[]]$('PackageManagement','PowerShellGet') | Where-Object -FilterScript {$ModulesUnwanted -contains $_}).'Count') -gt 0) {
         Throw ('ERROR - Either "PackageManagement" or "PowerShellGet" was specified in $ModulesUnwanted. This is not supported as the script would not work correctly without them.')
     }
-    
-    # Set ExecutionPolicy if needed
-    if ([string[]]$('AllSigned','Default','Restricted','Undefined') -contains [string]$([Microsoft.PowerShell.ExecutionPolicy]$(Get-ExecutionPolicy).ToString())) {
-        $null = Set-ExecutionPolicy -Scope 'Process' -ExecutionPolicy 'Unrestricted' -Confirm:$false -Force -ErrorAction 'Stop'
-    }
 
 
 
     # Prerequirements
     Write-Output -InputObject ('### Install Prerequirements.')
-    if ($InstallPrerequirements) {
+    if ([byte]$([string[]]$(Get-Module -Name 'PowerShellGet','PackageManagement' -ListAvailable -ErrorAction 'SilentlyContinue' | Where-Object -Property 'ModuleType' -eq 'Script' | Select-Object -ExpandProperty 'Name' -Unique).'Count') -lt 2) {        
+        Write-Output -InputObject ('Prerequirements were not met.')
+
+
         # Prerequirement - NuGet (Package Provider)
         Write-Output -InputObject ('# Prerequirement - Package Provider - "NuGet"' -f ("`r`n`r`n"))
         $VersionNuGetMinimum   = [System.Version]$(Find-PackageProvider -Name 'NuGet' -Force -Verbose:$false -Debug:$false | Select-Object -ExpandProperty 'Version')
@@ -595,7 +598,7 @@ else {
         }
     }
     else {
-        Write-Output -InputObject ('{0}Install Prerequirements is set to $false.' -f ("`t"))
+        Write-Output -InputObject ('Prerequirements were met.')
     }
 
 
