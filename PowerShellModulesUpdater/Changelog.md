@@ -1,20 +1,41 @@
 # Changelog
-## v1.5.1.0 191114
+## v1.6.0.0 191128
 ### Additions
-* Added "human readable" time start and time end output at the end, who reads time in the ToString('o') format anyway
+* Added setting for modules you don't want to get updated. 
+	* $ModulesDontUpdate.
 
 ### Fixes
 
 ### Improvements
-* Uses Begin, Process and End in every function
-* Use [OutputType] in each function
-* Better markdown syntax for changelog
+
+
+## v1.5.2.0 191127
+### Additions
+* Added stats.
+
+### Fixes
+* Minor code refactoring.
+
+### Improvements
+
+
+
+## v1.5.1.0 191114
+### Additions
+* Added "human readable" time start and time end output at the end, who reads time in the ToString('o') format anyway.
+
+### Fixes
+
+### Improvements
+* Uses Begin, Process and End in every function.
+* Use [OutputType] in each function.
+* Better markdown syntax for changelog.
 
 
 
 ## v1.5.0.0 191022
 ### Additions
-	* Greatly improved speed by writing my own function for getting all installed versions of a module
+* Greatly improved speed by writing my own function for getting all installed versions of a module.
 
 ### Fixes
 

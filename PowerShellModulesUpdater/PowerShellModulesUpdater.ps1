@@ -3,7 +3,7 @@
     .NAME
         PowerShellModulesUpdater.ps1
 
-    .SYNAPSIS
+    .SYNOPSIS
         Updates, installs and removes PowerShell modules on your system based on settings in the "Settings & Variables" region.
 
     .DESCRIPTION
@@ -26,9 +26,9 @@
 
     .NOTES
         Author:        Olav Rønnestad Birkeland
-        Version:       1.5.1.0
+        Version:       1.6.0.0
         Creation Date: 190310
-        Modified Date: 191022
+        Modified Date: 191128
 #>
 
 
@@ -66,6 +66,7 @@ else {
         'ExchangeOnlineManagement',               # Microsoft. Used for managing Exchange Online.
         'ImportExcel',                            # dfinke.    Used for import/export to Excel.
         'IntuneBackupAndRestore',                 # John Seerden. Uses "MSGraphFunctions" module to backup and restore Intune config.
+        'Invokeall',                              # Santhosh Sethumadhavan. Multithread PowerShell commands.
         'ISESteroids',                            # Power The Shell, ISE Steroids. Used for extending PowerShell ISE functionality.        
         'Microsoft.Graph.Intune',                 # Microsoft. Used for managing Intune using PowerShell Graph in the backend.
         'Microsoft.Online.SharePoint.PowerShell', # Microsoft. Used for managing SharePoint Online.
@@ -75,6 +76,7 @@ else {
         'PartnerCenter',                          # Microsoft. Used for authentication against Azure CSP Subscriptions.
         'PackageManagement',                      # Microsoft. Used for installing/ uninstalling modules.
         'PolicyFileEditor',                       # Microsoft. Used for local group policy / gpedit.msc.
+        'PoshRSJob',                              # Boe Prox. Used for parallel execution of PowerShell.
         'PowerShellGet',                          # Microsoft. Used for installing updates.
         'PSScriptAnalyzer',                       # Microsoft. Used to analyze PowerShell scripts to look for common mistakes + give advice.
         'PSWindowsUpdate',                        # Michal Gajda. Used for updating Windows.
@@ -85,6 +87,10 @@ else {
     $ModulesUnwanted = [string[]]@(
         'AzureRM',                # (DEPRECATED, "Az" is it's successor)            Used for managing Azure Resource Manager resources/ objects        
         'PartnerCenterModule'     # (DEPRECATED, "PartnerCenter" is it's successor) Used for authentication against Azure CSP Subscriptions
+    )
+
+    # List of modules you don't want to get updated
+    $ModulesDontUpdate = [string[]]$(
     )
 #endregion Settings & Variables
 
@@ -272,18 +278,25 @@ else {
                         Continue ForEachModule
                     }
                     else {               
-                        Write-Output -InputObject ('{0}Newer version available. Installing v{1}.' -f ("`t",$VersionAvailable.ToString()))               
-                        Install-Module -Name $ModuleName -Confirm:$false -Scope 'AllUsers' -RequiredVersion $VersionAvailable -AllowClobber -AcceptLicense:$AcceptLicenses -Verbose:$false -Debug:$false -Force
-                        $Success = [bool]$($?)
-                        Write-Output -InputObject ('{0}{0}Success? {0}' -f ("`t",$Success.ToString))
-                        if ($Success) {
-                            # Updated cache of installed modules and version if current module has sub modules
-                            if ([uint16]$([string[]]$($ModulesInstalledNames | Where-Object -FilterScript {$_ -like ('{0}.?*' -f ($Module))}) | Measure-Object | Select-Object -ExpandProperty 'Count') -ge 1) {
-                                Get-ModulesInstalled
-                            }
-                            # Else, set flag to update cache of installed modules later
-                            else {
-                                $Script:ModulesInstalledNeedsRefresh = $true
+                        Write-Output -InputObject ('{0}Newer version available, v{1}.' -f ("`t",$VersionAvailable.ToString()))               
+                        if ($ModulesDontUpdate -contains $ModuleName) {
+                            Write-Output -InputObject ('{0}{0}Will not update as module is specified in script settings. ($ModulesDontUpdate).' -f ("`t",$Success.ToString))
+                        }
+                        else {
+                            Install-Module -Name $ModuleName -Confirm:$false -Scope 'AllUsers' -RequiredVersion $VersionAvailable -AllowClobber -AcceptLicense:$AcceptLicenses -Verbose:$false -Debug:$false -Force
+                            $Success = [bool]$($?)
+                            Write-Output -InputObject ('{0}{0}Success? {0}' -f ("`t",$Success.ToString))
+                            if ($Success) {
+                                # Stats
+                                $Script:ModulesUpdated += [string[]]$($ModuleName)
+                                # Updated cache of installed modules and version if current module has sub modules
+                                if ([uint16]$([string[]]$($ModulesInstalledNames | Where-Object -FilterScript {$_ -like ('{0}.?*' -f ($Module))}) | Measure-Object | Select-Object -ExpandProperty 'Count') -ge 1) {
+                                    Get-ModulesInstalled
+                                }
+                                # Else, set flag to update cache of installed modules later
+                                else {
+                                    $Script:ModulesInstalledNeedsRefresh = $true
+                                }
                             }
                         }
                     }
@@ -322,8 +335,8 @@ else {
 
                 # Help Variables
                 $C = [uint16]$(1)
-                $CTotal = [string]$($ModulesWanted.Count)
-                $Digits = [string]$('0' * $CTotal.Length)
+                $CTotal = [string]$($ModulesWanted.'Count')
+                $Digits = [string]$('0' * $CTotal.'Length')
                 $ModulesInstalledNames = [string[]]$($Script:ModulesInstalled | Select-Object -ExpandProperty 'Name' | Sort-Object)
 
 
@@ -340,7 +353,12 @@ else {
                         Install-Module -Name $ModuleWanted -Confirm:$false -Scope 'AllUsers' -AllowClobber -AcceptLicense:$AcceptLicenses -Verbose:$false -Debug:$false -Force
                         $Success = [bool]$($?)
                         Write-Output -InputObject ('{0}{0}Success? {1}' -f ("`t",$Success.ToString()))
-                        if ($Success) {$Script:ModulesInstalledNeedsRefresh = $true}
+                        if ($Success) {
+                            # Stats
+                            $Script:ModulesInstalledMissing += [string[]]$($ModuleWanted)
+                            # Make sure list of installed modules gets refreshed
+                            $Script:ModulesInstalledNeedsRefresh = $true                            
+                        }
                     }
                 }
             }
@@ -432,7 +450,12 @@ else {
                             Install-Module -Name $SubModuleName -Confirm:$false -Scope 'AllUsers' -AllowClobber -AcceptLicense:$AcceptLicenses -Verbose:$false -Debug:$false -Force
                             $Success = [bool]$($?)
                             Write-Output -InputObject ('{0}Install success? {1}' -f ([string]$("`t" * 3),$Success.ToString()))
-                            if ($Success) {$Script:ModulesInstalledNeedsRefresh = $true}
+                            if ($Success) {
+                                # Stats
+                                $Script:ModulesSubInstalledMissing += [string[]]$($SubModuleName)
+                                # Make sure list of installed modules gets refreshed
+                                $Script:ModulesInstalledNeedsRefresh = $true                                
+                            }
                         }
                     }
                 }
@@ -511,7 +534,10 @@ else {
                             $Success = [bool]$(@(Get-InstalledModule -Name $ModuleName -RequiredVersion $Version -ErrorAction 'SilentlyContinue').'Count' -eq 0)
                             Write-Output -InputObject ('{0}{0}{0}Success? {1}.' -f ("`t",$Success.ToString()))
                             if ($Success) {
-                                $Script:ModulesInstalledNeedsRefresh = $true
+                                # Stats
+                                $Script:ModulesUninstalledOutdated += [string[]]$($ModuleName)
+                                # Make sure list of installed modules gets refreshed
+                                $Script:ModulesInstalledNeedsRefresh = $true                                
                             }
                             else {
                                 # Special case for module "PackageManagement"
@@ -602,7 +628,12 @@ else {
 
                         # Write Out Success
                         Write-Output -InputObject ('{0}{0}Success? {1}.' -f ("`t",$Success.ToString()))
-                        if ($Success) {$Script:ModulesInstalledNeedsRefresh = $true}
+                        if ($Success) {
+                            # Stats
+                            $Script:ModulesUninstalledUnwanted += [string[]]$($Module)
+                            # Make sure list of installed modules gets refreshed
+                            $Script:ModulesInstalledNeedsRefresh = $true
+                        }
                     }
                 }
             }
@@ -610,6 +641,32 @@ else {
             End {}
         }
     #endregion Uninstall-ModulesUnwanted
+
+
+    #region    Output-Statistics
+        function Output-Statistics {
+            [CmdletBinding()]
+            [OutputType($null)]
+            Param ()
+            
+            Begin {}
+
+            Process {
+                # Help variables
+                $FormatDescriptionLength = [byte]$($Script:StatisticsVariables.ForEach{$_.'Description'.'Length'} | Sort-Object -Descending | Select-Object -First 1)
+                $FormatNewLineTab        = [string]$("`r`n`t")
+
+                # Output stats
+                foreach ($Variable in $Script:StatisticsVariables) {
+                    $CurrentObject      = [string[]]$(Get-Variable -Name $Variable.'VariableName' -Scope 'Script' -ValueOnly -ErrorAction 'SilentlyContinue')
+                    $CurrentDescription = [string]$($Variable.'Description'+':'+[string]$(' '*[byte]$($FormatDescriptionLength-$Variable.'Description'.'Length')))
+                    Write-Output -InputObject ('{0} {1}{2}' -f ($CurrentDescription,$CurrentObject.'Count',[string]$(if($CurrentObject.'Count' -ge 1){$FormatNewLineTab+[string]$($CurrentObject -join $FormatNewLineTab)})))
+                }
+            }
+
+            End {}
+        }
+    #endregion Output-Statistics
 #endregion Functions
 
 
@@ -621,6 +678,18 @@ else {
     
     # Set Script Scope Variables
     $Script:ModulesInstalledNeedsRefresh = [bool]$($true)
+    $Script:StatisticsVariables          = [PSCustomObject[]]$(
+        [PSCustomObject]@{'VariableName'='ModulesInstalledMissing';   'Description'='Installed (was missing)'},
+        [PSCustomObject]@{'VariableName'='ModulesSubInstalledMissing';'Description'='Installed submodule (was missing)'},
+        [PSCustomObject]@{'VariableName'='ModulesUpdated';            'Description'='Updated'},
+        [PSCustomObject]@{'VariableName'='ModulesUninstalledOutdated';'Description'='Uninstalled (outdated)'},
+        [PSCustomObject]@{'VariableName'='ModulesUninstalledUnwanted';'Description'='Uninstalled (unwanted)'}
+    )
+
+    # Make sure statistics are cleared for each run
+    foreach ($VariableName in [string[]]$($Script:StatisticsVariables | Select-Object -ExpandProperty 'VariableName')) {
+        $null = Get-Variable -Name $VariableName -Scope 'Script' -ErrorAction 'SilentlyContinue' | Remove-Variable -Scope 'Script' -Force
+    }
 
     # Check that same module is not specified in both $ModulesWanted and $ModulesUnwanted
     if (($ModulesWanted | Where-Object -FilterScript {$ModulesUnwanted -contains $_}).'Count' -ge 1) {
@@ -635,7 +704,7 @@ else {
 
 
     # Prerequirements
-    Write-Output -InputObject ('### Install Prerequirements.')
+    Write-Output -InputObject ('### Install Prerequirements')
     if ([byte]$([string[]]$(Get-Module -Name 'PowerShellGet','PackageManagement' -ListAvailable -ErrorAction 'SilentlyContinue' | Where-Object -Property 'ModuleType' -eq 'Script' | Select-Object -ExpandProperty 'Name' -Unique).'Count') -lt 2) {        
         Write-Output -InputObject ('Prerequirements were not met.')
 
@@ -744,6 +813,9 @@ else {
 
     # Write Stats
     Write-Output -InputObject ('{0}### Finished.' -f ("`r`n"))
+    Write-Output -InputObject ('#### Stats')
+    Output-Statistics
+    Write-Output -InputObject ('{0}#### Time' -f ("`r`n"))
     Write-Output -InputObject ('Start Time:    {0} ({1}).' -f ($Script:TimeTotalStart.ToString('HH\:mm\:ss'),$Script:TimeTotalStart.ToString('o')))
     Write-Output -InputObject ('End Time:      {0} ({1}).' -f (($Script:TimeTotalEnd = [datetime]::Now).ToString('HH\:mm\:ss'),$Script:TimeTotalEnd.ToString('o')))
     Write-Output -InputObject ('Total Runtime: {0}.' -f ([string]$([timespan]$($Script:TimeTotalEnd - $Script:TimeTotalStart)).ToString('hh\:mm\:ss')))
