@@ -1,4 +1,19 @@
 # Changelog
+## v1.7.0.0 200323
+### Additions
+
+### Fixes
+* Install-MissingSubModules
+	* Lists a installed module thats not available from PowerShell Gallery anymore as missing sub module.
+		* "Compare-Object" returns objects not in reference object AND difference object.
+		* Use .Where instead
+
+### Improvements
+* Syntax fix, quotation marks on all dot properties
+* Some speed ups using .Where.
+
+
+
 ## v1.6.0.0 191128
 ### Additions
 * Added setting for modules you don't want to get updated. 
@@ -7,6 +22,7 @@
 ### Fixes
 
 ### Improvements
+
 
 
 ## v1.5.2.0 191127

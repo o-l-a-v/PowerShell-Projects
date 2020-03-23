@@ -26,9 +26,9 @@
 
     .NOTES
         Author:        Olav Rønnestad Birkeland
-        Version:       1.6.0.0
+        Version:       1.7.0.0
         Creation Date: 190310
-        Modified Date: 191128
+        Modified Date: 200323
 #>
 
 
@@ -57,7 +57,7 @@ else {
     $ProgressPreference = 'SilentlyContinue'
 
     # List of wanted modules
-    $ModulesWanted = [string[]]@(
+    $ModulesWanted = [string[]]$(
         'Az',                                     # Microsoft. Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
         'Azure',                                  # Microsoft. Used for managing Classic Azure resources/ objects.        
         'AzureAD',                                # Microsoft. Used for managing Azure Active Directory resources/ objects.
@@ -70,6 +70,9 @@ else {
         'ISESteroids',                            # Power The Shell, ISE Steroids. Used for extending PowerShell ISE functionality.        
         'Microsoft.Graph.Intune',                 # Microsoft. Used for managing Intune using PowerShell Graph in the backend.
         'Microsoft.Online.SharePoint.PowerShell', # Microsoft. Used for managing SharePoint Online.
+        'Microsoft.PowerShell.SecretsManagement', # Microsoft. Used for securely storing secrets locally.
+        'Microsoft.RDInfra.RDPowerShell',         # Microsoft. Used for managing Windows Virtual Desktop.
+        'MicrosoftGraphSecurity',                 # Microsoft. Used for interacting with Microsoft Graph Security API.
         'MSGraphFunctions',                       # John Seerden. Wrapper for Microsoft Graph Rest API.
         'MSOnline',                               # (DEPRECATED, "AzureAD" is it's successor)       Used for managing Microsoft Cloud Objects (Users, Groups, Devices, Domains...)
         'newtonsoft.json',                        # Serialize/Deserialize Json using Newtonsoft.json
@@ -84,13 +87,14 @@ else {
     )
     
     # List of Unwanted Modules - Will Remove Every Related Module, for AzureRM for instance will also search for AzureRM.*
-    $ModulesUnwanted = [string[]]@(
+    $ModulesUnwanted = [string[]]$(
         'AzureRM',                # (DEPRECATED, "Az" is it's successor)            Used for managing Azure Resource Manager resources/ objects        
         'PartnerCenterModule'     # (DEPRECATED, "PartnerCenter" is it's successor) Used for authentication against Azure CSP Subscriptions
     )
 
     # List of modules you don't want to get updated
     $ModulesDontUpdate = [string[]]$(
+        ''
     )
 #endregion Settings & Variables
 
@@ -149,7 +153,7 @@ else {
 
             Begin {}
 
-            Process {
+            Process {                                
                 # Access the main module page, and add a random number to trick proxies
                 $Url = [string]('https://www.powershellgallery.com/packages/{0}/?dummy={1}' -f ($ModuleName,[System.Random]::New().Next(9999)))
                 Write-Debug -Message ('URL for module "{0}" = "{1}".' -f ($ModuleName,$Url))
@@ -161,7 +165,8 @@ else {
 
                 # Do not allow to redirect. The result is a "MovedPermanently"
                 $Request.'AllowAutoRedirect' = $false
-            
+                $Request.'Proxy' = $null
+
             
                 # Try to get published version number
                 Try {
@@ -201,7 +206,10 @@ else {
             #>
             [CmdletBinding(SupportsPaging=$false)]
             [OutputType([PSCustomObject[]])]    
-            Param()
+            Param(
+                [Parameter(Mandatory = $false)]
+                [switch] $Beta
+            )
             
             Begin {}
             
@@ -212,8 +220,31 @@ else {
             
             
                 # Refresh Script Scope Variable "ModulesInstalledAll" for a list of all currently installed modules
-                $null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'ModulesInstalled' `
-                    -Value ([PSCustomObject[]]$([array]$(Get-InstalledModule).Where{$_.'Repository' -eq 'PSGallery'} | Select-Object -Property 'Name','Version' | Sort-Object -Property 'Name'))
+                if ($Beta) {
+                    ## Fast but finds non-PSGallery modules
+                    $null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'ModulesInstalled' -Value (
+                        [array](
+                            $(
+                                Get-ChildItem -Directory -Recurse:$false -Path (
+                                    '{0}\WindowsPowerShell\Modules\{1}' -f (
+                                        [string]$(if([System.Environment]::Is64BitProcess){$env:ProgramW6432}else{${env:ProgramFiles(x86)}}),
+                                        $_
+                                        )
+                                    )
+                            ).ForEach{
+                                [PSCustomObject]@{
+                                    'Name'    = [string] $_.'Name'
+                                    'Version' = [System.Version]($([System.Version[]](Get-ChildItem -Directory -Recurse:$false -Path $_.'FullName').'Name' | Sort-Object -Descending)[0])
+                                }
+                            }
+                        )
+                    )
+                }
+                else {
+                    ## Working but slow
+                    $null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'ModulesInstalled' `
+                        -Value ([PSCustomObject[]]$([array]$(Get-InstalledModule).Where{$_.'Repository' -eq 'PSGallery'} | Select-Object -Property 'Name','Version' | Sort-Object -Property 'Name'))                    
+                }                
             }
 
             End {}
@@ -250,8 +281,8 @@ else {
 
                 # Help Variables
                 $C = [uint16]$(1)
-                $CTotal = [string]$($Script:ModulesInstalled.Count)
-                $Digits = [string]$('0' * $CTotal.Length)
+                $CTotal = [string]$($Script:ModulesInstalled.'Count')
+                $Digits = [string]$('0' * $CTotal.'Length')
                 $ModulesInstalledNames = [string[]]$($Script:ModulesInstalled | Select-Object -ExpandProperty 'Name' | Sort-Object)
 
 
@@ -265,8 +296,7 @@ else {
                 
                     # Get Version Installed - Get Fresh Version Number if newer version is available and current module is a sub module
                     if ([System.Version]$($VersionAvailable) -gt [System.Version]$($VersionInstalled) -and $ModuleName -like '*?.?*' -and [string[]]$($ModulesInstalledNames) -contains [string]$($ModuleName.Replace(('.{0}' -f ($ModuleName.Split('.')[-1])),''))) {
-                        $VersionInstalled = [System.Version]$(Get-ModuleInstalledVersions -ModuleName $ModuleName | Sort-Object -Descending | Select-Object -First 1)
-                        # $VersionInstalled = [System.Version]$([System.Version[]]$(Get-InstalledModule -Name $ModuleName -AllVersions | Select-Object -ExpandProperty 'Version') | Sort-Object -Descending | Select-Object -First 1)
+                        $VersionInstalled = [System.Version]$(Get-ModuleInstalledVersions -ModuleName $ModuleName | Sort-Object -Descending | Select-Object -First 1)                        
                     }
                 
                     # Present Current Module
@@ -279,25 +309,30 @@ else {
                     }
                     else {               
                         Write-Output -InputObject ('{0}Newer version available, v{1}.' -f ("`t",$VersionAvailable.ToString()))               
-                        if ($ModulesDontUpdate -contains $ModuleName) {
-                            Write-Output -InputObject ('{0}{0}Will not update as module is specified in script settings. ($ModulesDontUpdate).' -f ("`t",$Success.ToString))
-                        }
-                        else {
-                            Install-Module -Name $ModuleName -Confirm:$false -Scope 'AllUsers' -RequiredVersion $VersionAvailable -AllowClobber -AcceptLicense:$AcceptLicenses -Verbose:$false -Debug:$false -Force
-                            $Success = [bool]$($?)
-                            Write-Output -InputObject ('{0}{0}Success? {0}' -f ("`t",$Success.ToString))
-                            if ($Success) {
-                                # Stats
-                                $Script:ModulesUpdated += [string[]]$($ModuleName)
-                                # Updated cache of installed modules and version if current module has sub modules
-                                if ([uint16]$([string[]]$($ModulesInstalledNames | Where-Object -FilterScript {$_ -like ('{0}.?*' -f ($Module))}) | Measure-Object | Select-Object -ExpandProperty 'Count') -ge 1) {
-                                    Get-ModulesInstalled
-                                }
-                                # Else, set flag to update cache of installed modules later
-                                else {
-                                    $Script:ModulesInstalledNeedsRefresh = $true
+                        if ([bool]$($null=Find-Package -Name $ModuleName -Source 'PSGallery' -AllVersions:$false -Force -ErrorAction 'SilentlyContinue';$?)) {
+                            if ($ModulesDontUpdate -contains $ModuleName) {
+                                Write-Output -InputObject ('{0}{0}Will not update as module is specified in script settings. ($ModulesDontUpdate).' -f ("`t",$Success.ToString))
+                            }
+                            else {
+                                Install-Module -Name $ModuleName -Confirm:$false -Scope 'AllUsers' -RequiredVersion $VersionAvailable -AllowClobber -AcceptLicense:$AcceptLicenses -Verbose:$false -Debug:$false -Force
+                                $Success = [bool]$($?)
+                                Write-Output -InputObject ('{0}{0}Success? {1}' -f ("`t",$Success.ToString))
+                                if ($Success) {
+                                    # Stats
+                                    $Script:ModulesUpdated += [string[]]$($ModuleName)
+                                    # Updated cache of installed modules and version if current module has sub modules
+                                    if ([uint16]$([string[]]$($ModulesInstalledNames | Where-Object -FilterScript {$_ -like ('{0}.?*' -f ($Module))}) | Measure-Object | Select-Object -ExpandProperty 'Count') -ge 1) {
+                                        Get-ModulesInstalled
+                                    }
+                                    # Else, set flag to update cache of installed modules later
+                                    else {
+                                        $Script:ModulesInstalledNeedsRefresh = $true
+                                    }
                                 }
                             }
+                        }
+                        else {
+                            Write-Warning -Message ('Did not find "{0}" in PSGallery, probably deprecated, delisted or something similar. Will skip.' -f ($ModuleName))
                         }
                     }
                 }
@@ -345,19 +380,24 @@ else {
                     Write-Output -InputObject ('{0}/{1} {2}' -f (($C++).ToString($Digits),$CTotal,$ModuleWanted))
                 
                     # Install if not already installed
-                    if ([string[]]$([string[]]$($ModulesInstalledNames) | Where-Object -FilterScript {$_ -eq $ModuleWanted}).Count -ge 1) {
-                        Write-Output -InputObject ('{0}Already Installed. Next!.' -f ("`t"))
+                    if ([string[]]$([string[]]$($ModulesInstalledNames) | Where-Object -FilterScript {$_ -eq $ModuleWanted}).'Count' -ge 1) {
+                        Write-Output -InputObject ('{0}Already Installed. Next!' -f ("`t"))
                     }
                     else {
                         Write-Output -InputObject ('{0}Not already installed. Installing.' -f ("`t"))
-                        Install-Module -Name $ModuleWanted -Confirm:$false -Scope 'AllUsers' -AllowClobber -AcceptLicense:$AcceptLicenses -Verbose:$false -Debug:$false -Force
-                        $Success = [bool]$($?)
-                        Write-Output -InputObject ('{0}{0}Success? {1}' -f ("`t",$Success.ToString()))
-                        if ($Success) {
-                            # Stats
-                            $Script:ModulesInstalledMissing += [string[]]$($ModuleWanted)
-                            # Make sure list of installed modules gets refreshed
-                            $Script:ModulesInstalledNeedsRefresh = $true                            
+                        if ([bool]$($null=Find-Package -Name $ModuleWanted -Source 'PSGallery' -AllVersions:$false -Force -ErrorAction 'SilentlyContinue';$?)) {
+                            Install-Module -Name $ModuleWanted -Confirm:$false -Scope 'AllUsers' -AllowClobber -AcceptLicense:$AcceptLicenses -Verbose:$false -Debug:$false -Force
+                            $Success = [bool]$($?)
+                            Write-Output -InputObject ('{0}{0}Success? {1}' -f ("`t",$Success.ToString()))
+                            if ($Success) {
+                                # Stats
+                                $Script:ModulesInstalledMissing += [string[]]$($ModuleWanted)
+                                # Make sure list of installed modules gets refreshed
+                                $Script:ModulesInstalledNeedsRefresh = $true                            
+                            }
+                        }
+                        else {
+                            Write-Warning -Message ('Did not find "{0}" in PSGallery, probably deprecated, delisted or something similar. Will skip.' -f ($ModuleWanted))
                         }
                     }
                 }
@@ -391,7 +431,7 @@ else {
 
 
                 # Skip if no installed modules was found
-                if ($Script:ModulesInstalled.Count -le 0) {
+                if ($Script:ModulesInstalled.'Count' -le 0) {
                     Write-Output -InputObject ('No installed modules where found, no modules to check against.')
                     Break
                 }
@@ -399,7 +439,12 @@ else {
 
                 # Help Variables - Both Foreach
                 $ModulesInstalledNames       = [string[]]$($Script:ModulesInstalled | Select-Object -ExpandProperty 'Name' | Sort-Object)
-                $ParentModulesInstalledNames = [string[]]$($ModulesInstalledNames | Where-Object -FilterScript {$_ -notlike '*.*' -or ($_ -like '*.*' -and [string[]]$($ModulesInstalledNames) -notcontains [string]$($_.Replace(('.{0}' -f ($_.Split('.')[-1])),'')))})
+                $ParentModulesInstalledNames = [string[]]$(
+                    $ModulesInstalledNames.Where{
+                        $_ -notlike '*.*' -or 
+                        ($_ -like '*.*' -and [string[]]$($ModulesInstalledNames) -notcontains [string]$($_.Replace(('.{0}' -f ($_.Split('.')[-1])),'')))
+                    }
+                )
             
 
                 # Help Variables - Outer Foreach
@@ -430,8 +475,16 @@ else {
 
 
                     # Compare objects to see which are missing
-                    $SubModulesMissing = [string[]]$(if($SubModulesInstalled.'Count' -eq 0){$SubModulesAvailable}else{Compare-Object -ReferenceObject $SubModulesInstalled -DifferenceObject $SubModulesAvailable -PassThru})
-                    Write-Output -InputObject ('{0}Found {1} missing sub module{2}.' -f ("`t",$SubModulesMissing.'Count'.ToString(),[string]$(if($SubModulesMissing.Count -ne 1){'s'})))
+                    $SubModulesMissing = [string[]]$(
+                        if ($SubModulesInstalled.'Count' -eq 0) {
+                            $SubModulesAvailable
+                        }
+                        else {
+                            $SubModulesAvailable.Where{$_ -notin $SubModulesInstalled}
+                        }
+                    )
+                    ## Output result
+                    Write-Output -InputObject ('{0}Found {1} missing sub module{2}.' -f ("`t",$SubModulesMissing.'Count'.ToString(),[string]$(if($SubModulesMissing.'Count' -ne 1){'s'})))
 
 
                     # Install missing sub modules
@@ -445,16 +498,21 @@ else {
                         :ForEachSubModule foreach ($SubModuleName in $SubModulesMissing) {
                             # Present Current Sub Module
                             Write-Output -InputObject ('{0}{1}/{2} {3}' -f ([string]$("`t" * 2),($IC++).ToString($IDigits),$ICTotal,$SubModuleName))
-
-                            # Install The Missing Sub Module
-                            Install-Module -Name $SubModuleName -Confirm:$false -Scope 'AllUsers' -AllowClobber -AcceptLicense:$AcceptLicenses -Verbose:$false -Debug:$false -Force
-                            $Success = [bool]$($?)
-                            Write-Output -InputObject ('{0}Install success? {1}' -f ([string]$("`t" * 3),$Success.ToString()))
-                            if ($Success) {
-                                # Stats
-                                $Script:ModulesSubInstalledMissing += [string[]]$($SubModuleName)
-                                # Make sure list of installed modules gets refreshed
-                                $Script:ModulesInstalledNeedsRefresh = $true                                
+                            
+                            if ([bool]$($null=Find-Package -Name $SubModuleName -Source 'PSGallery' -AllVersions:$false -Force -ErrorAction 'SilentlyContinue';$?)) {
+                                # Install The Missing Sub Module
+                                Install-Module -Name $SubModuleName -Confirm:$false -Scope 'AllUsers' -AllowClobber -AcceptLicense:$AcceptLicenses -Verbose:$false -Debug:$false -Force
+                                $Success = [bool]$($?)
+                                Write-Output -InputObject ('{0}Install success? {1}' -f ([string]$("`t" * 3),$Success.ToString()))
+                                if ($Success) {
+                                    # Stats
+                                    $Script:ModulesSubInstalledMissing += [string[]]$($SubModuleName)
+                                    # Make sure list of installed modules gets refreshed
+                                    $Script:ModulesInstalledNeedsRefresh = $true                                
+                                }
+                            }
+                            else {
+                                Write-Warning -Message ('Did not find "{0}" in PSGallery, probably deprecated, delisted or something similar. Will skip.' -f ($SubModuleName))
                             }
                         }
                     }
@@ -504,8 +562,7 @@ else {
                     Write-Output -InputObject ('{0}/{1} {2}' -f (($C++).ToString($Digits),$CTotal,$ModuleName))
                 
                     # Get all versions installed
-                    $VersionsAll = [System.Version[]]$(Get-ModuleInstalledVersions -ModuleName $ModuleName | Sort-Object -Descending)
-                    #$VersionsAll = [System.Version[]]$(Get-InstalledModule -Name $ModuleName -AllVersions | Select-Object -ExpandProperty 'Version' | Sort-Object -Descending)
+                    $VersionsAll = [System.Version[]]$(Get-ModuleInstalledVersions -ModuleName $ModuleName | Sort-Object -Descending)                    
                     Write-Output -InputObject ('{0}{1} got {2} installed version{3} ({4}).' -f ("`t",$ModuleName,$VersionsAll.'Count'.ToString(),[string]$(if($VersionsAll.'Count' -gt 1){'s'}),[string]($VersionsAll -join ', ')))
             
                     # Remove old versions if more than 1 versions
@@ -530,8 +587,8 @@ else {
                         # Uninstall all but newest
                         foreach ($Version in $VersionsAllButNewest) {
                             Write-Output -InputObject ('{0}{0}Uninstalling module "{1}" version "{2}".' -f ("`t",$ModuleName,$Version.ToString()))                        
-                            $null = Try{Uninstall-Module -Name $ModuleName -RequiredVersion $Version -Force -ErrorAction 'SilentlyContinue' -WarningAction 'SilentlyContinue' 2>&1}Catch{}
-                            $Success = [bool]$(@(Get-InstalledModule -Name $ModuleName -RequiredVersion $Version -ErrorAction 'SilentlyContinue').'Count' -eq 0)
+                            $Success = [bool]$(Try{$null = PackageManagement\Uninstall-Package -Name $ModuleName -RequiredVersion $Version -Force -WarningAction 'SilentlyContinue' -ErrorAction 'SilentlyContinue';$?}Catch{$false})
+                            $Success = [bool]$(if($Success){@(PackageManagement\Get-Package -Name $ModuleName -RequiredVersion $Version -ErrorAction 'SilentlyContinue').'Count' -eq 0}else{$Success})
                             Write-Output -InputObject ('{0}{0}{0}Success? {1}.' -f ("`t",$Success.ToString()))
                             if ($Success) {
                                 # Stats
@@ -603,7 +660,7 @@ else {
 
 
                 # Write Out How Many Unwanted Modules Was Found
-                Write-Output -InputObject ('Found {0} unwanted module{1}.{2}' -f ($ModulesToRemove.Count,$(if($ModulesToRemove.Count -ne 1){'s'}),$(if($ModulesToRemove.Count -gt 0){' Will proceed to uninstall them.'})))    
+                Write-Output -InputObject ('Found {0} unwanted module{1}.{2}' -f ($ModulesToRemove.'Count',$(if($ModulesToRemove.'Count' -ne 1){'s'}),$(if($ModulesToRemove.'Count' -gt 0){' Will proceed to uninstall them.'})))    
 
 
                 # Uninstall Unwanted Modules If More Than 0 Was Found
@@ -674,17 +731,7 @@ else {
 
 #region    Main
     # Start Time
-    New-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'TimeTotalStart' -Value ([datetime]$([datetime]::Now))
-    
-    # Set Script Scope Variables
-    $Script:ModulesInstalledNeedsRefresh = [bool]$($true)
-    $Script:StatisticsVariables          = [PSCustomObject[]]$(
-        [PSCustomObject]@{'VariableName'='ModulesInstalledMissing';   'Description'='Installed (was missing)'},
-        [PSCustomObject]@{'VariableName'='ModulesSubInstalledMissing';'Description'='Installed submodule (was missing)'},
-        [PSCustomObject]@{'VariableName'='ModulesUpdated';            'Description'='Updated'},
-        [PSCustomObject]@{'VariableName'='ModulesUninstalledOutdated';'Description'='Uninstalled (outdated)'},
-        [PSCustomObject]@{'VariableName'='ModulesUninstalledUnwanted';'Description'='Uninstalled (unwanted)'}
-    )
+    New-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'TimeTotalStart' -Value ([datetime]$([datetime]::Now))    
 
     # Make sure statistics are cleared for each run
     foreach ($VariableName in [string[]]$($Script:StatisticsVariables | Select-Object -ExpandProperty 'VariableName')) {
@@ -701,6 +748,21 @@ else {
         Throw ('ERROR - Either "PackageManagement" or "PowerShellGet" was specified in $ModulesUnwanted. This is not supported as the script would not work correctly without them.')
     }
 
+    # Set Script Scope Variables
+    $Script:ModulesInstalledNeedsRefresh = [bool]$($true)
+    $Script:StatisticsVariables          = [PSCustomObject[]]$(
+        [PSCustomObject]@{'VariableName'='ModulesInstalledMissing';   'Description'='Installed (was missing)'},
+        [PSCustomObject]@{'VariableName'='ModulesSubInstalledMissing';'Description'='Installed submodule (was missing)'},
+        [PSCustomObject]@{'VariableName'='ModulesUpdated';            'Description'='Updated'},
+        [PSCustomObject]@{'VariableName'='ModulesUninstalledOutdated';'Description'='Uninstalled (outdated)'},
+        [PSCustomObject]@{'VariableName'='ModulesUninstalledUnwanted';'Description'='Uninstalled (unwanted)'}
+    )
+
+    # Set settings
+    ## Disable proxies for speed
+    [System.Net.WebRequest]::DefaultWebProxy = $null
+    ## Use TLS 1.2
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
 
     # Prerequirements
@@ -798,7 +860,7 @@ else {
         Write-Output -InputObject ('{0}Install Missing Sub Modules is set to $false.' -f ("`t"))
     }
 
-
+    
 
     # Remove old modules
     Write-Output -InputObject ('{0}### Remove Outdated Modules' -f ("`r`n`r`n"))
