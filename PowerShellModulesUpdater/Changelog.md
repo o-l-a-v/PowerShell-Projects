@@ -1,4 +1,31 @@
 # Changelog
+
+
+
+## v1.9.0.0 200523
+### Additions
+* Function "Uninstall-ModuleManually" to speed up uninstall of outdated modules.
+* More useful modules to install.
+
+### Fixes
+
+### Improvements
+* Corrected info about some of the modules in the list of modules to install.
+
+
+
+## v1.8.0.0 200407
+### Additions
+
+### Fixes
+
+### Improvements
+* Now using "PackageManagemeng\Install-Package" instead of "Install-Module", because "Install-Module" does not set error variable $? correctly if it fails.
+* Some speed ups
+	* Use ".'Property'" instead of "Select-Object -ExpandProperty 'Property'
+
+
+
 ## v1.7.0.0 200323
 ### Additions
 

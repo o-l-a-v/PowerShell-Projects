@@ -26,9 +26,9 @@
 
     .NOTES
         Author:        Olav Rønnestad Birkeland
-        Version:       1.8.0.0
+        Version:       1.9.0.0
         Creation Date: 190310
-        Modified Date: 200407    
+        Modified Date: 200523    
 
     .EXAMPLE
         # Run from PowerShell ISE
