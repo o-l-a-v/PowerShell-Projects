@@ -1,4 +1,12 @@
 # Changelog
+## v1.9.1.0 201003
+### Additions
+* Added check to see if powershellgallery.com is up and responding.
+* Added ability to harcode module versions to keep/ now remove.
+
+### Fixes
+
+### Improvements
 
 
 

@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1 -RunAsAdministrator
+﻿#Requires -Version 5.1 -PSEdition Desktop -RunAsAdministrator
 <#
     .NAME
         PowerShellModulesUpdater.ps1
@@ -26,17 +26,17 @@
 
     .NOTES
         Author:        Olav Rønnestad Birkeland
-        Version:       1.9.0.0
+        Version:       1.9.1.0
         Creation Date: 190310
-        Modified Date: 200523    
+        Modified Date: 201103
 
     .EXAMPLE
         # Run from PowerShell ISE
-        & ('{0}\Setup Lighthouse Subscription.ps1' -f ([System.IO.Directory]::GetParent($psISE.'CurrentFile'.'FullPath').'FullName'))
+        & $psISE.'CurrentFile'.'FullPath'
 
     .EXAMPLE
         # Run from PowerShell ISE, bypass script execution policy
-        & powershell.exe -ExecutionPolicy "Bypass" -NoLogo -NonInteractive -NoProfile -WindowStyle "Hidden" -File ('{0}\Setup Lighthouse Subscription.ps1' -f ([System.IO.Directory]::GetParent($psISE.'CurrentFile'.'FullPath').'FullName'))    
+        & powershell.exe -ExecutionPolicy "Bypass" -NoLogo -NonInteractive -NoProfile -WindowStyle "Hidden" -File $psISE.'CurrentFile'.'FullPath'
 #>
 
 
@@ -53,7 +53,7 @@ else {
     ## Accept licenses - Some modules requires you to accept licenses.
     $AcceptLicenses           = [bool] $true
     ## Skip Publisher Check - Security, checks signing of the module against alleged publisher.
-    $SkipPublisherCheck       = [bool] $false
+    $SkipPublisherCheck       = [bool] $true
 
     # Action - What Options Would You Like To Perform
     $InstallMissingModules    = [bool] $true
@@ -69,19 +69,20 @@ else {
     # List of wanted modules
     $ModulesWanted = [string[]]$(
         'Az',                                     # Microsoft. Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
+        'AzSK',                                   # Microsoft. Azure Secure DevOps Kit. https://azsk.azurewebsites.net/00a-Setup/Readme.html
         'Azure',                                  # Microsoft. Used for managing Classic Azure resources/ objects.        
         'AzureAD',                                # Microsoft. Used for managing Azure Active Directory resources/ objects.
         'AzureADPreview',                         # -^-
-        'AzureRM',                                # (DEPRECATED, "Az" is it's successor). Microsoft. Used for managing Azure Resource Manager resources/ objects
-        'ConfluencePS',                           # Atlassian, for interacting with Atlassian Confluence Rest API.
+        'AzureRM',                                # (DEPRECATED, "Az" is it's successor). Microsoft. Used for managing Azure Resource Manager resources/ objects.        
+        'ConfluencePS',                           # Atlassian, for interacting with Atlassian Confluence Rest API.        
+        'ExchangeOnlineManagement',               # Microsoft. Used for managing Exchange Online.        
         'GetBIOS',                                # Damien Van Robaeys. Used for getting BIOS settings for Lenovo, Dell and HP.
-        'ExchangeOnlineManagement',               # Microsoft. Used for managing Exchange Online.
         'ImportExcel',                            # dfinke.    Used for import/export to Excel.
         'Intune.USB.Creator',                     # Ben Reader @ powers-hell.com. Used to create Autopilot WinPE.
         'IntuneBackupAndRestore',                 # John Seerden. Uses "MSGraphFunctions" module to backup and restore Intune config.
-        'Invokeall',                              # Santhosh Sethumadhavan. Multithread PowerShell commands.
-        'ISESteroids',                            # Power The Shell, ISE Steroids. Used for extending PowerShell ISE functionality.
+        'Invokeall',                              # Santhosh Sethumadhavan. Multithread PowerShell commands.        
         'JWTDetails',                             # Darren J. Robinson. Used for decoding JWT, JSON Web Tokens.
+        'Mailozaurr',                             # Przemyslaw Klys. Used for various email related tasks.
         'Microsoft.Graph',                        # Microsoft. Works with PowerShell Core.
         'Microsoft.Graph.Intune',                 # Microsoft. Used for managing Intune using PowerShell Graph in the backend.
         'Microsoft.Online.SharePoint.PowerShell', # Microsoft. Used for managing SharePoint Online.
@@ -89,9 +90,11 @@ else {
         'Microsoft.PowerShell.SecretsManagement', # Microsoft. Used for securely storing secrets locally.
         'Microsoft.RDInfra.RDPowerShell',         # Microsoft. Used for managing Windows Virtual Desktop.
         'MicrosoftGraphSecurity',                 # Microsoft. Used for interacting with Microsoft Graph Security API.
+        'MicrosoftPowerBIMgmt',                   # MIcrosoft. Used for managing Power BI.
         'MSGraphFunctions',                       # John Seerden. Wrapper for Microsoft Graph Rest API.
         'MSOnline',                               # (DEPRECATED, "AzureAD" is it's successor) Microsoft. Used for managing Microsoft Cloud Objects (Users, Groups, Devices, Domains...)
         'newtonsoft.json',                        # Serialize/Deserialize Json using Newtonsoft.json
+        'Office365DnsChecker',                    # Colin Cogle. Checks a domain's Office 365 DNS records for correctness.
         'PartnerCenter',                          # Microsoft. Used for interacting with PartnerCenter API.
         'PackageManagement',                      # Microsoft. Used for installing/ uninstalling modules.
         'platyPS',                                # Microsoft. Used for converting markdown to PowerShell XML external help files.
@@ -101,18 +104,31 @@ else {
         'PSReadLine',                             # Microsoft. Used for helping when scripting PowerShell.
         'PSScriptAnalyzer',                       # Microsoft. Used to analyze PowerShell scripts to look for common mistakes + give advice.
         'PSWindowsUpdate',                        # Michal Gajda. Used for updating Windows.
+        'RunAsUser',                              # Kelvin Tegelaar. Allows running as current user while running as SYSTEM using impersonation.
         'SetBIOS',                                # Damien Van Robaeys. Used for setting BIOS settings for Lenovo, Dell and HP.
         'WindowsAutoPilotIntune'                  # Michael Niehaus @ Microsoft. Used for Intune AutoPilot stuff.
     )
     
     # List of Unwanted Modules - Will Remove Every Related Module, for AzureRM for instance will also search for AzureRM.*
-    $ModulesUnwanted = [string[]]$(
+    $ModulesUnwanted = [string[]](
+        'AzureAutomationAuthoringToolkit',        # Microsoft, Azure Automation Account add-on for PowerShell ISE.
+        'ISESteroids',                            # Power The Shell, ISE Steroids. Used for extending PowerShell ISE functionality.
         'PartnerCenterModule'                     # (DEPRECATED, "PartnerCenter" is it's successor). Microsoft. Used for interacting with Partner Center API.
     )
 
     # List of modules you don't want to get updated
     $ModulesDontUpdate = [string[]]$(
         ''
+    )
+
+    # List of module versions you don't want removed
+    $ModulesVersionsDontRemove = [ordered]@{
+        'Az.Resources' = [System.Version[]] '2.3.0'
+    }
+
+    # List of wanted scripts
+    $ScriptsWanted = [string[]](
+        'Get-WindowsAutoPilotInfo'                # Microsoft, Michael Niehaus. Get Windows AutoPilot info.
     )
 #endregion Settings & Variables
 
@@ -248,8 +264,12 @@ else {
                 $null = Set-Variable -Scope 'Script' -Option 'None' -Force -Name 'ModulesInstalledNeedsRefresh' -Value ([bool]$false)
                         
                 # Get installed modules                    
-                $null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'ModulesInstalled' -Value $(
-                    ([PSCustomObject[]]$([array]$(Get-Package -Name '*' -ProviderName 'PowerShellGet' -AllVersions:$AllVersions) | Select-Object -Property 'Name','Version' | Sort-Object -Property 'Name','Version'))
+                $null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'ModulesInstalled' -Value (
+                    [PSCustomObject[]](
+                        Get-Package -Name '*' -ProviderName 'PowerShellGet' -AllVersions:$AllVersions | `
+                            Select-Object -Property 'Name','Version',@{'Name'='Author';'Expression'={$_.'Entities'.Where{$_.'role' -eq 'author'}.'Name'}} | `
+                            Sort-Object -Property 'Name','Version'                           
+                    )
                 )
             }
         }
@@ -453,30 +473,39 @@ else {
             }
 
             # Help Variables - Both Foreach
-            $ModulesInstalledNames       = [string[]]$($Script:ModulesInstalled.'Name' | Sort-Object)
-            $ParentModulesInstalledNames = [string[]]$(
-                $ModulesInstalledNames.Where{
-                    [bool]($_ -in $ModulesWanted) -or
-                    [bool]($_ -notlike '*.*') -or 
-                    [bool]($_ -like '*.*' -and $_ -notlike '*.*.*' -and [string[]]$($ModulesInstalledNames) -notcontains [string]$($_.Replace(('.{0}' -f ($_.Split('.')[-1])),'')))
-                }
+            $ParentModulesInstalled = [array](
+                $ModulesInstalled.Where{
+                    [bool]($_.'Name' -in $ModulesWanted) -or
+                    [bool]($_.'Name' -notlike '*.*') -or 
+                    [bool](
+                        $_.'Name' -like '*.*' -and 
+                        $_.'Name' -notlike '*.*.*' -and 
+                        [string[]]$($ModulesInstalled.'Name') -notcontains [string]$($_.'Name'.Replace(('.{0}' -f ($_.'Name'.Split('.')[-1])),''))
+                    )
+                } | Select-Object -Property 'Name','Author' | Sort-Object -Property 'Name' -Unique
             )
             
             # Help Variables - Outer Foreach
             $OC = [uint16]$(1)
-            $OCTotal = [string]$($ParentModulesInstalledNames.'Count'.ToString())
+            $OCTotal = [string]$($ParentModulesInstalled.'Count'.ToString())
             $ODigits = [string]$('0' * $OCTotal.'Length')
 
             # Loop Through All Installed Modules
-            :ForEachModule foreach ($ModuleName in $ParentModulesInstalledNames) {
+            :ForEachModule foreach ($Module in $ParentModulesInstalled) {
                 # Present Current Module
-                Write-Output -InputObject ('{0}/{1} {2}' -f (($OC++).ToString($ODigits),$OCTotal,$ModuleName))
+                Write-Output -InputObject ('{0}/{1} {2} by "{3}"' -f (($OC++).ToString($ODigits),$OCTotal,$Module.'Name',$Module.'Author'))
                 
                 # Get all installed sub modules
-                $SubModulesInstalled = [string[]]$($ModulesInstalledNames.Where{$_ -like ('{0}.*' -f ($ModuleName))} | Sort-Object)
+                $SubModulesInstalled = [string[]]$($ModulesInstalled.Where{$_.'Name' -like ('{0}.*' -f ($Module.'Name')) -and $_.'Author' -eq $Module.'Author'}.'Name' | Sort-Object)
 
                 # Get all available sub modules
-                $SubModulesAvailable = [string[]]$($([array](Find-Module -Name ('{0}.*' -f ($ModuleName)))).'Name' | Sort-Object)
+                $SubModulesAvailable = [string[]](
+                    $(
+                        [array](
+                            Find-Module -Name ('{0}.*' -f ($Module.'Name')) | Where-Object -Property 'Author' -EQ $Module.'Author'
+                        )
+                    ).'Name' | Sort-Object
+                )
 
                 # If either $SubModulesAvailable is 0, Continue Outer Foreach
                 if ($SubModulesAvailable.'Count' -eq 0) {
@@ -725,42 +754,48 @@ else {
                     # Uninstall all but newest
                     foreach ($Version in $VersionsAllButNewest) {
                         Write-Output -InputObject ('{0}{0}Uninstalling module "{1}" version "{2}".' -f ("`t",$ModuleName,$Version.ToString()))                        
-                            
-                        # Uninstall
-                        $Success = [bool]$(
-                            Try {
-                                $null = Uninstall-ModuleManually -ModuleName $ModuleName -Version $Version -WarningAction 'SilentlyContinue' -ErrorAction 'SilentlyContinue'
-                                $?
-                            }
-                            Catch {
-                                $false
-                            }
-                        )
-                            
-                        # Check for success
-                        $Success = [bool]$(
-                            if ($Success) {
-                                $([array](PackageManagement\Get-Package -Name $ModuleName -RequiredVersion $Version -ErrorAction 'SilentlyContinue')).'Count' -eq 0
-                            }
-                            else {
-                                $Success
-                            }
-                        )
-                            
-                        # Output
-                        Write-Output -InputObject ('{0}{0}{0}Success? {1}.' -f ("`t",$Success.ToString()))
-                        if ($Success) {
-                            # Stats
-                            $Script:ModulesUninstalledOutdated += [string[]]($ModuleName)
-                            # Make sure list of installed modules gets refreshed
-                            $Script:ModulesInstalledNeedsRefresh = $true                                
+                        
+                        # Check if current version is not to be uninstalled / specified in $ModulesVersionsDontRemove
+                        if ($([System.Version[]]($ModulesVersionsDontRemove.$ModuleName) -contains $([System.Version]($Version)))) {
+                            Write-Output -InputObject ('{0}{0}{0}This version is not to be uninstalled because it`s specified in $ModulesVersionsDontRemove.' -f ("`t"))
                         }
                         else {
-                            # Special case for module "PackageManagement"
-                            if ($ModuleName -eq 'PackageManagement') {
-                                Write-Warning -Message ('{0}{0}{0}{0}"PackageManagement" often can`t be removed before exiting current PowerShell session.' -f ("`t")) -WarningAction 'Continue'
+                            # Uninstall
+                            $Success = [bool]$(
+                                Try {
+                                    $null = Uninstall-ModuleManually -ModuleName $ModuleName -Version $Version -WarningAction 'SilentlyContinue' -ErrorAction 'SilentlyContinue'
+                                    $?
+                                }
+                                Catch {
+                                    $false
+                                }
+                            )
+                            
+                            # Check for success
+                            $Success = [bool]$(
+                                if ($Success) {
+                                    $([array](PackageManagement\Get-Package -Name $ModuleName -RequiredVersion $Version -ErrorAction 'SilentlyContinue')).'Count' -eq 0
+                                }
+                                else {
+                                    $Success
+                                }
+                            )
+                            
+                            # Output
+                            Write-Output -InputObject ('{0}{0}{0}Success? {1}.' -f ("`t",$Success.ToString()))
+                            if ($Success) {
+                                # Stats
+                                $Script:ModulesUninstalledOutdated += [string[]]($ModuleName)
+                                # Make sure list of installed modules gets refreshed
+                                $Script:ModulesInstalledNeedsRefresh = $true                                
                             }
-                            Continue ForEachModuleName
+                            else {
+                                # Special case for module "PackageManagement"
+                                if ($ModuleName -eq 'PackageManagement') {
+                                    Write-Warning -Message ('{0}{0}{0}{0}"PackageManagement" often can`t be removed before exiting current PowerShell session.' -f ("`t")) -WarningAction 'Continue'
+                                }
+                                Continue ForEachModuleName
+                            }
                         }
                     }
                 }
@@ -900,15 +935,28 @@ else {
         $null = Get-Variable -Name $VariableName -Scope 'Script' -ErrorAction 'SilentlyContinue' | Remove-Variable -Scope 'Script' -Force
     }
 
-    # Check that same module is not specified in both $ModulesWanted and $ModulesUnwanted
+
+    # Failproof
+    ## Check that same module is not specified in both $ModulesWanted and $ModulesUnwanted
     if (($ModulesWanted | Where-Object -FilterScript {$ModulesUnwanted -contains $_}).'Count' -ge 1) {
         Throw ('ERROR - Same module(s) are specified in both $ModulesWanted and $ModulesUnwanted.')
     }
 
-    # Check that neccesary modules are not specified in $ModulesUnwanted
+    ## Check that neccesary modules are not specified in $ModulesUnwanted
     if ([byte]($([string[]]($([string[]]('PackageManagement','PowerShellGet')).Where{$ModulesUnwanted -contains $_})).'Count') -gt 0) {
         Throw ('ERROR - Either "PackageManagement" or "PowerShellGet" was specified in $ModulesUnwanted. This is not supported as the script would not work correctly without them.')
     }
+
+    ## Check that PowerShellGallery is available    
+    if (-not(Test-NetConnection -ComputerName 'powershellgallery.com' -Port 443 -InformationLevel 'Quiet' -WarningAction 'SilentlyContinue')) {
+        Throw ('ERROR - Could not connect to powershellgallery.com. Do you have internet connection, or is the web site down?')
+    }
+
+    ## Check that PowerShellGallery is responding within reasonable time
+    if (-not[bool]$(Try{$null=Invoke-RestMethod -Method 'Get' -Uri 'https://www.powershellgallery.com' -TimeoutSec 2;$?}Catch{$false})) {
+        Throw ('ERROR - Could ping powershellgallery.com, but it did not manage to provide a response within reasonable time.')
+    }
+    
 
     # Set Script Scope Variables
     $Script:ModulesInstalledNeedsRefresh = [bool]$($true)
@@ -919,6 +967,7 @@ else {
         [PSCustomObject]@{'VariableName'='ModulesUninstalledOutdated';'Description'='Uninstalled (outdated)'},
         [PSCustomObject]@{'VariableName'='ModulesUninstalledUnwanted';'Description'='Uninstalled (unwanted)'}
     )
+
 
     # Set settings
     ## Disable proxies for speed
