@@ -10,6 +10,7 @@
 * Added ```[OutputType()]``` to all functions.
 * All functions are now context aware.
 * Cleanup downloaded and extracted file when done.
+* More output to terminal.
 * Syntax cleanup.
 
 
