@@ -1,4 +1,29 @@
 # Changelog
+## v210503
+### Additions
+* Script version is not just ```YYMMdd``` for simplicity.
+* On a fresh client where the module has never run before, script can now install prerequirements and continue with the script in one run by loading newest versions of the prerequirements automatically.
+* Can now update and uninstall old version of ```PowerShellGet``` in one run, by simply:
+  * Update to newer version if available.
+  * Unload (```Remove-Module -Force```) all versions from current session.
+  * Import (```Import-Module```) newest installed version to current session.
+  * Uninstall old version.
+
+### Fixes
+* Fixed some buggy text output to terminal.
+
+### Improvements
+* ```Write-Information``` instead of ```Write-Output``` for outputting text to terminal.
+  * ```Write-Output``` is for returning objects.
+  * ```Write-Information``` has no downsides with PowerShell 6 and newer, but for PowerShell 5.1 this output stream is:
+    * Not enabled by default (requires ```$InformationPreference = 'Continue'```).
+	* Will not be visable if logging using ```Start-Transcript``` function.
+* Will always start by updating prerequirement PowerShell modules ```PackageManagement``` and ```PowerShellGet```.
+* Using markdown syntax for headers for script output. One ```#``` for H1 etc.
+* Some syntax cleanup.
+
+
+
 ## v1.9.1.0 201003
 ### Additions
 * Added check to see if powershellgallery.com is up and responding.
