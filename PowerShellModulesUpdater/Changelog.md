@@ -1,7 +1,31 @@
 # Changelog
+## v210819
+### Additions
+* Started on the mission of enabling the script to install modules either in user (CurrentUser) or system (AllUsers) context.
+  * System context works, user context is not properly tested yet.
+  
+### Fixes
+* Check for prerequired components and modules:
+  * Better logic on using built in ```PowerShellGet``` and ```PackageManagement``` binaries until their modules are installed from PowerShellGallery.
+
+### Improvements
+
+
+
+## v210614
+### Additions
+
+### Fixes
+
+### Improvements
+* Added quicker check for prerequired components and modules:
+  * If ```PackageManagement``` exists as module type ```Script```, not just ```Binary```, we should be good.
+
+
+
 ## v210503
 ### Additions
-* Script version is not just ```YYMMdd``` for simplicity.
+* Script version is now just ```YYMMdd``` for simplicity.
 * On a fresh client where the module has never run before, script can now install prerequirements and continue with the script in one run by loading newest versions of the prerequirements automatically.
 * Can now update and uninstall old version of ```PowerShellGet``` in one run, by simply:
   * Update to newer version if available.

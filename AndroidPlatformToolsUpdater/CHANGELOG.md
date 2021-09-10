@@ -1,4 +1,14 @@
 # Changelog
+## v210910
+### Additions
+* Get available version from Google webpage by downloading it and parsing the HTML
+  * Logic might break, then the script will just depend on the install function to check installed version vs. the downloaded vesion.
+
+### Fixes
+
+### Improvements
+* Better output to terminal.
+
 ## v201214
 ### Additions
 * Use 7-Zip if installed and found.
