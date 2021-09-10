@@ -513,7 +513,6 @@ function Get-AndroidPlatformToolsFromWebpage {
     else {
         Write-Information -MessageData 'Found no installed version.'
     }
-
     
     ## Available version
     Write-Information -MessageData ('{0}## Available version' -f [System.Environment]::NewLine)
@@ -529,9 +528,10 @@ function Get-AndroidPlatformToolsFromWebpage {
     # Install platform-tools
     Write-Information -MessageData ('{0}{0}# Install Android platform tools' -f [System.Environment]::NewLine)
     if (
+        $ForceInstallAndroidPlatformTools -or
         $VersionInstalled -eq [System.Version]('0.0.0.0') -or
         $VersionAvailable -eq [System.Version]('0.0.0.0') -or 
-        $VersionAvailable -gt $VersionInstalled
+        $VersionAvailable -gt $VersionInstalled        
     ) {
         Write-Information -MessageData 'Installing newest version.'
         $Success = [bool](
