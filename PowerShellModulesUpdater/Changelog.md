@@ -1,4 +1,16 @@
 # Changelog
+## v210914
+### Additions
+* Added installing scripts from PowerShellGallery defined in variable $ScriptsWanted.
+* Added updating already installed scripts that origin from PowerShellGallery.
+
+### Fixes
+
+### Improvements
+* Some touchups on output to reflect that the script now does both modules and scripts.
+
+
+
 ## v210819
 ### Additions
 * Started on the mission of enabling the script to install modules either in user (CurrentUser) or system (AllUsers) context.

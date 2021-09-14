@@ -27,7 +27,7 @@
     .NOTES
         Author:   Olav Rønnestad Birkeland (https://github.com/o-l-a-v)
         Created:  190310
-        Modified: 210819
+        Modified: 210914
 
     .EXAMPLE
         # Run from PowerShell ISE
@@ -110,6 +110,7 @@ $ModulesWanted = [string[]]$(
     'PolicyFileEditor',                       # Microsoft. Used for local group policy / gpedit.msc.
     'PoshRSJob',                              # Boe Prox. Used for parallel execution of PowerShell.
     'PowerShellGet',                          # Microsoft. Used for installing updates.
+    'PSIntuneAuth',                           # Nickolaj Andersen. Get auth token to Intune.
     'PSPKI',                                  # Vadims Podans. Used for infrastructure and certificate management.
     'PSReadLine',                             # Microsoft. Used for helping when scripting PowerShell.
     'PSScriptAnalyzer',                       # Microsoft. Used to analyze PowerShell scripts to look for common mistakes + give advice.
@@ -147,7 +148,9 @@ $ModulesVersionsDontRemove = [ordered]@{
 
 # List of wanted scripts
 $ScriptsWanted = [string[]](
-    'Get-WindowsAutoPilotInfo'                # Microsoft, Michael Niehaus. Get Windows AutoPilot info.
+    'Get-WindowsAutoPilotInfo',                # Microsoft, Michael Niehaus. Get Windows AutoPilot info.
+    'Get-AutopilotDiagnostics',                # Microsoft, Michael Niehaus. Display diagnostics information.
+    'Upload-WindowsAutopilotDeviceInfo'        # Nickolaj Andersen. Upload autopilot hash straight to Intune.
 )
 
 
@@ -223,29 +226,30 @@ function Get-ModuleInstalledVersions {
 #endregion Get-ModuleInstalledVersions
     
     
-#region    Get-ModulePublishedVersion
-function Get-ModulePublishedVersion {
+#region    Get-PowerShellGalleryPackageLatestVersion
+function Get-PowerShellGalleryPackageLatestVersion {
     <#
         .SYNAPSIS
-            Fetches latest version number of a given module from PowerShellGallery.
+            Fetches latest version number of a given pacakge (module or script) from PowerShellGallery.
             
         .PARAMETER ModuleName
-            String, name of the module you want to check.
+            String, name of the package (module or script) you want to check.
     #>            
     [CmdletBinding(SupportsPaging=$false)]
     [OutputType([System.Version])]    
     param(
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory, HelpMessage = 'Name of the PowerShellGallery package (module or script) to fetch.')]
         [ValidateNotNullOrEmpty()]
-        [string] $ModuleName
+        [Alias('ModuleName','ScriptName')]
+        [string] $PackageName
     )
 
     Begin {}
 
     Process {                                
         # Access the main module page, and add a random number to trick proxies
-        $Url = [string]('https://www.powershellgallery.com/packages/{0}/?dummy={1}' -f ($ModuleName,$Script:Random.Next(9999)))
-        Write-Debug -Message ('URL for module "{0}" = "{1}".' -f ($ModuleName,$Url))
+        $Url = [string]('https://www.powershellgallery.com/packages/{0}/?dummy={1}' -f ($PackageName,$Script:Random.Next(9999)))
+        Write-Debug -Message ('URL for module "{0}" = "{1}".' -f ($PackageName,$Url))
             
 
         # Create Request Url
@@ -283,10 +287,11 @@ function Get-ModulePublishedVersion {
 
     End {}
 }
-#endregion Get-ModulePublishedVersion
+#endregion Get-PowerShellGalleryPackageLatestVersion
 
 
 
+#region    Modules
 #region    Refresh-ModulesInstalled
 function Refresh-ModulesInstalled {
     <#
@@ -296,10 +301,10 @@ function Refresh-ModulesInstalled {
     [CmdletBinding(SupportsPaging=$false)]
     [OutputType([PSCustomObject[]])]    
     Param(
-        [Parameter(Mandatory = $false)]
+        [Parameter()]
         [switch] $AllVersions,
 
-        [Parameter(Mandatory = $false)]
+        [Parameter()]
         [switch] $ForceRefresh
     )
             
@@ -368,7 +373,7 @@ function Update-ModulesInstalled {
         # Update Modules
         :ForEachModule foreach ($ModuleName in $ModulesInstalledNames) {                
             # Get Latest Available Version
-            $VersionAvailable = [System.Version]$(Get-ModulePublishedVersion -ModuleName $ModuleName)
+            $VersionAvailable = [System.Version]$(Get-PowerShellGalleryPackageLatestVersion -PackageName $ModuleName)
                 
             # Get Version Installed
             $VersionInstalled = [System.Version]$($Script:ModulesInstalled.Where{$_.'Name' -eq $ModuleName}.'Version')
@@ -452,7 +457,7 @@ function Install-ModulesMissing {
     [CmdletBinding(SupportsPaging=$false)]
     [OutputType($null)]
     Param(
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory)]
         [string[]] $ModulesWanted                
     )
 
@@ -668,21 +673,21 @@ function Uninstall-ModuleManually {
     [OutputType($null)]
     Param (
         # Mandatory
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string] $ModuleName,
 
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory)]
         [System.Version] $Version,
 
         # Optional
-        [Parameter(Mandatory = $false)]
+        [Parameter()]
         [bool] $SystemContext = $true,
 
-        [Parameter(Mandatory = $false)]
+        [Parameter()]
         [bool] $64BitModuleOn64BitOS = $true,
 
-        [Parameter(Mandatory = $false)]
+        [Parameter()]
         [string] $ModulePath
     )
 
@@ -1001,6 +1006,122 @@ function Uninstall-ModulesUnwanted {
     End {}
 }
 #endregion Uninstall-ModulesUnwanted
+#endregion Modules
+
+
+
+#region    Scripts
+#region    Install-ScriptsMissing
+function Install-ScriptsMissing {
+    <#
+        .SYNOPSIS
+            Installs scripts that is not already installed.'
+    #>
+    [OutputType($null)]
+    Param(
+        [Parameter(Mandatory, HelpMessage = 'String array with script names from PowerShell Gallery.')]
+        [string[]] $Scripts,
+
+        [Parameter(Mandatory, HelpMessage = 'Scope')]
+        [ValidateSet('AllUsers','CurrentUser')]
+        [string] $Scope
+    )
+
+    Begin {
+    }
+
+    Process{
+        $Scripts.ForEach{
+            Write-Information -MessageData (
+                '{0} / {1} "{2}"' -f (
+                    (1+$Scripts.IndexOf($_)).ToString('0'*$Scripts.'Count'.ToString().'Length'),
+                    $Scripts.'Count'.Tostring(),
+                    $_
+                )
+            )
+            if ($(Try{$null=PackageManagement\Get-Package -Type 'Script' -Name $_ -AllVersions -Scope $Scope 2>$null; $?}Catch{$false})) {
+                Write-Information -MessageData 'Already installed.'
+            }
+            else {
+                Write-Information -MessageData 'Not already installed.'
+                if (
+                    [string]::IsNullOrEmpty(
+                        (PackageManagement\Find-Package -Name $_ -Source (PackageManagement\Get-PackageSource -Name 'PSGallery').'Location').'Name'
+                    )
+                ) {
+                    Write-Warning -Message 'Not found on PowerShellGaellery.'
+                }
+                else {
+                    $null = PowerShellGet\Install-Script -Name $_ -Scope $Scope -Force -Repository 'PSGallery'
+                    $Script:ScriptsMissing += [string[]]($_)
+                    Write-Information -MessageData ('{0}Successfully installed.' -f "`t")
+                }
+            }
+        }
+    }
+
+    End {
+    }
+}
+#endregion Install-ScriptsMissing
+
+
+#region    Update-ScriptsInstalled
+function Update-ScriptsInstalled {
+    <#
+        .SYNOPSIS
+            Updates installed scripts originating from PowerShell Gallery.
+    #>
+
+    # Input parameters
+    [OutputType($null)]
+    Param(
+        [Parameter(Mandatory, HelpMessage = 'Scope.')]
+        [ValidateSet('AllUsers','CurrentUser')]
+        [string] $Scope
+    )
+
+    Begin {
+    }
+
+    Process {
+        $ScriptsInstalled = [array](
+            PackageManagement\Get-Package -Type 'Script' -Scope $Scope
+        )
+        $ScriptsInstalled.ForEach{
+            # Output current script
+            Write-Information -MessageData (
+                '{0} / {1} "{2}" v{3} by "{4}"' -f (
+                    (1+$ScriptsInstalled.IndexOf($_)).ToString('0'*$ScriptsInstalled.'Count'.ToString().'Length'),
+                    $ScriptsInstalled.'Count'.Tostring(),
+                    $_.'Name',
+                    $_.'Version'.ToString(),
+                    $_.'Entities'.Where{$_.'Role' -eq 'author'}.'Name'
+                )
+            )
+            # Find package on PowerShell Gallery
+            $Package = PackageManagement\Find-Package -Name $_.'Name' -Source (PackageManagement\Get-PackageSource -Name 'PSGallery').'Location' 2>$null
+            # Skip if can't be found on PowerShell Gallery
+            if ([string]::IsNullOrEmpty($Package.'Name')) {                                  
+                Write-Information -MessageData 'Not from PowerShell Gallery, or at least could not be found.'
+            }
+            else {
+                if ($Package.'Version' -gt $_.'Version') {
+                    Write-Information -MessageData ('Newer version available, v{0}.' -f $_.'Version'.ToString())
+                    $null = PowerShellGet\Install-Script -Name $_.'Name' -Scope $Scope -Force -Repository 'PSGallery'
+                    $Script:ScriptsUpdated += [string[]]($_.'Name')
+                    Write-Information -MessageData ('{0}Successfully installed.' -f "`t")
+                }
+                else {
+                    Write-Information -MessageData 'No newer version available.'
+                }
+            }
+        }
+    }
+}
+#endregion Update-ScriptsInstalled
+#endregion Scripts
+
 
 
 #region    Output-Statistics
@@ -1130,11 +1251,13 @@ if (-not[bool]$(Try{$null=Invoke-RestMethod -Method 'Get' -Uri 'https://www.powe
 # Set Script Scope Variables
 $Script:ModulesInstalledNeedsRefresh = [bool] $true
 $Script:StatisticsVariables          = [PSCustomObject[]](
-    [PSCustomObject]@{'VariableName'='ModulesInstalledMissing';   'Description'='Installed (was missing)'},
-    [PSCustomObject]@{'VariableName'='ModulesSubInstalledMissing';'Description'='Installed submodule (was missing)'},
-    [PSCustomObject]@{'VariableName'='ModulesUpdated';            'Description'='Updated'},
-    [PSCustomObject]@{'VariableName'='ModulesUninstalledOutdated';'Description'='Uninstalled (outdated)'},
-    [PSCustomObject]@{'VariableName'='ModulesUninstalledUnwanted';'Description'='Uninstalled (unwanted)'}
+    [PSCustomObject]@{'VariableName'='ModulesInstalledMissing';   'Description'='Modules installed (was missing)'},
+    [PSCustomObject]@{'VariableName'='ModulesSubInstalledMissing';'Description'='Submodules installed (was missing)'},
+    [PSCustomObject]@{'VariableName'='ModulesUpdated';            'Description'='Modules updated'},
+    [PSCustomObject]@{'VariableName'='ModulesUninstalledOutdated';'Description'='Modules uninstalled (outdated)'},
+    [PSCustomObject]@{'VariableName'='ModulesUninstalledUnwanted';'Description'='Modules uninstalled (unwanted)'},
+    [PSCustomObject]@{'VariableName'='ScriptsMissing';            'Description'='Scripts installed (was missing)'},
+    [PSCustomObject]@{'VariableName'='ScriptsUpdated';            'Description'='Scripts updated'}
 )
 
 
@@ -1197,7 +1320,7 @@ else {
     foreach ($ModuleName in 'PackageManagement','PowerShellGet') {
         Write-Information -MessageData $ModuleName
         # Get version available
-        $VersionAvailable = [System.Version](Get-ModulePublishedVersion -ModuleName $ModuleName)
+        $VersionAvailable = [System.Version](Get-PowerShellGalleryPackageLatestVersion -PackageName $ModuleName)
         # Get version installed
         $VersionInstalled = [System.Version](
             Get-Module -ListAvailable -Name $ModuleName -ErrorAction 'SilentlyContinue' | `
@@ -1235,20 +1358,21 @@ else {
 }
 
 
+# Modules
+## Introduce step
+Write-Information -MessageData ('{0}# Modules' -f ([System.Environment]::NewLine*2))
 
-# Uninstall Unwanted Modules
-Write-Information -MessageData ('{0}# Uninstall unwanted modules' -f ([System.Environment]::NewLine*2))
+## Uninstall Unwanted Modules
+Write-Information -MessageData '## Uninstall unwanted modules'
 if ($UninstallUnwantedModules) {
     Uninstall-ModulesUnwanted -ModulesUnwanted $ModulesUnwanted
 }
 else {
     Write-Information -MessageData ('{0}Uninstall unwanted modules is set to $false.' -f ("`t"))
 }
-    
 
-
-# Update Installed Modules
-Write-Information -MessageData ('{0}# Update installed modules' -f ([System.Environment]::NewLine*2))
+## Update Installed Modules
+Write-Information -MessageData ('{0}## Update installed modules' -f [System.Environment]::NewLine)
 if ($InstallUpdatedModules) {
     Update-ModulesInstalled
 }
@@ -1256,10 +1380,8 @@ else {
     Write-Information -MessageData ('{0}Update installed modules is set to $false.' -f ("`t"))
 }
 
-
-
-# Install Missing Modules
-Write-Information -MessageData ('{0}# Install missing modules' -f ([System.Environment]::NewLine*2))
+## Install Missing Modules
+Write-Information -MessageData ('{0}## Install missing modules' -f [System.Environment]::NewLine)
 if ($InstallMissingModules) {
     Install-ModulesMissing -ModulesWanted $ModulesWanted
 }
@@ -1267,10 +1389,8 @@ else {
     Write-Information -MessageData ('{0}Install missing modules is set to $false.' -f ("`t"))
 }
 
-
-
-# Installing Missing Sub Modules
-Write-Information -MessageData ('{0}# Install missing sub modules' -f ([System.Environment]::NewLine*2))
+## Installing Missing Sub Modules
+Write-Information -MessageData ('{0}## Install missing sub modules' -f [System.Environment]::NewLine)
 if ($InstallMissingSubModules) {
     Install-SubModulesMissing
 }
@@ -1278,16 +1398,28 @@ else {
     Write-Information -MessageData ('{0}Install missing sub modules is set to $false.' -f ("`t"))
 }
 
-    
-
-# Remove old modules
-Write-Information -MessageData ('{0}# Remove outdated modules' -f ([System.Environment]::NewLine*2))
+## Remove old modules
+Write-Information -MessageData ('{0}## Remove outdated modules' -f [System.Environment]::NewLine)
 if ($UninstallOutdatedModules) {
     Uninstall-ModulesOutdated
 }
 else {
     Write-Information -MessageData ('{0}Remove outdated modules is set to $false.' -f "`t")
 }
+
+
+
+# Scripts
+## Introduce step
+Write-Information -MessageData ('{0}# Scripts' -f ([System.Environment]::NewLine*2))
+
+## Install missing scripts
+Write-Information -MessageData '## Install missing scripts if any'
+Install-ScriptsMissing -Scripts $Script:ScriptsWanted -Scope $Script:Scope
+
+## Update existing scripts if newer are available
+Write-Information -MessageData '## Update installed scripts'
+Update-ScriptsInstalled -Scope $Script:Scope
 
 
 
