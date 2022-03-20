@@ -1,14 +1,11 @@
 # Changelog
-## v220311
+## v220320
 ### Additions
 * Make sure not to use PowerShellGet v3 if installed.
   * It's not ready yet IMO, and it's still in beta.
 
 ### Fixes
 * Fixed that the script would not load the newest versions of required modules ```PowerShellGet``` and ```PackageManagement```.
-* Fixed that ```PackageManagement\Install-Package``` parameter ```-AcceptLicense``` suddenly doesn't work anymore by commenting it out.
-  * I don't know what changed, there haven't been any new stable versions of ```PowerShellGet``` and ```PackageManagement``` recently.
-  * ```-AccepptLicense``` is still listed in the [documentation](https://docs.microsoft.com/en-us/powershell/module/packagemanagement/install-package?view=powershell-5.1#parameters).
 * Implemented short term fix for version numbers that can't be read as ```[System.Version]```, like prereleases.
   * For instance, ```PowerShellGet v3.0.12-beta```.
   * Short term fix: Ignore such version numbers.

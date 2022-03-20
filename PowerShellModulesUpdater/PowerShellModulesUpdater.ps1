@@ -25,17 +25,17 @@
                 * PowerShellGet      https://www.powershellgallery.com/packages/PowerShellGet          
 
     .NOTES
-        Author:   Olav Rønnestad Birkeland | https://github.com/o-l-a-v
+        Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
         Created:  190310
-        Modified: 211220
+        Modified: 220320
 
     .EXAMPLE
-        # Run from PowerShell ISE
-        & $psISE.'CurrentFile'.'FullPath'
+        # Run from PowerShell ISE, system context
+        & $psISE.CurrentFile.FullPath
 
     .EXAMPLE
-        # Run from PowerShell ISE, bypass script execution policy
-        & powershell.exe -ExecutionPolicy 'Bypass' -NoLogo -NonInteractive -NoProfile -WindowStyle 'Hidden' -File $psISE.'CurrentFile'.'FullPath'
+        # Run from PowerShell ISE, system context, bypass script execution policy
+        Set-ExecutionPolicy -Scope 'Process' -ExecutionPolicy 'Bypass' -Force; & $psISE.CurrentFile.FullPath        
 #>
 
 
@@ -563,8 +563,18 @@ function Install-ModulesMissing {
                 Write-Information -MessageData ('{0}Not already installed. Installing.' -f "`t")
                 if ([bool]$($null=Find-Package -Name $ModuleWanted -Source 'PSGallery' -AllVersions:$false -Force -ErrorAction 'SilentlyContinue';$?)) {
                     # Install The Missing Sub Module
-                    $Success = [bool]$(Try{$null=PackageManagement\Install-Package -Name $ModuleWanted -Scope $Scope -AllowClobber <# -AcceptLicense:$AcceptLicenses #> -SkipPublisherCheck:$SkipPublisherCheck -Confirm:$false -Verbose:$false -Debug:$false -Force 2>$null;$?}Catch{$false})                                                           
-                                
+                    $Success = [bool]$(
+                        Try {
+                            $null = PackageManagement\Install-Package -Name $ModuleWanted -Scope $Scope -Source 'PSGallery' -Force `
+                                -AllowClobber -AcceptLicense:$AcceptLicenses -SkipPublisherCheck:$SkipPublisherCheck `
+                                -Confirm:$false -Verbose:$false -Debug:$false 2>$null
+                            $?
+                        }
+                        Catch {
+                            $false
+                        }
+                    )
+
                     # Output success
                     Write-Information -MessageData ('{0}Install success? {1}' -f ([string]$("`t" * 2),$Success.ToString()))
                             
@@ -702,8 +712,17 @@ function Install-SubModulesMissing {
                     # Install if package available
                     if ($?) {
                         # Install The Missing Sub Module
-                        $Success = [bool]$(Try{$null=PackageManagement\Install-Package -Name $SubModuleName -RequiredVersion $PackageAvailable.'Version' -Scope $Scope -AllowClobber <# -AcceptLicense:$AcceptLicenses #> -SkipPublisherCheck:$SkipPublisherCheck -Confirm:$false -Verbose:$false -Debug:$false -Force 2>$null;$?}Catch{$false})
-                                
+                        $Success = [bool]$(
+                            Try {
+                                $null = PackageManagement\Install-Package -Name $SubModuleName -Scope $Scope -Source 'PSGallery' -Force `
+                                    -AllowClobber -AcceptLicense:$AcceptLicenses -SkipPublisherCheck:$SkipPublisherCheck `
+                                    -Confirm:$false -Verbose:$false -Debug:$false 2>$null
+                                $?
+                            }
+                            Catch {
+                                $false
+                            }
+                        )
                         # Doubles check for success
                         if ($Success) {
                             $Success = [bool](Test-Path -Path ('{0}\WindowsPowerShell\Modules\{1}' -f ($env:ProgramW6432,$SubModuleName,$PackageAvailable.'Version'.ToString())))
