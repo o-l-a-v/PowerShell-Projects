@@ -1,4 +1,38 @@
 # Changelog
+## v220311
+### Additions
+* Make sure not to use PowerShellGet v3 if installed.
+  * It's not ready yet IMO, and it's still in beta.
+
+### Fixes
+* Fixed that the script would not load the newest versions of required modules ```PowerShellGet``` and ```PackageManagement```.
+* Fixed that ```PackageManagement\Install-Package``` parameter ```-AcceptLicense``` suddenly doesn't work anymore by commenting it out.
+  * I don't know what changed, there haven't been any new stable versions of ```PowerShellGet``` and ```PackageManagement``` recently.
+  * ```-AccepptLicense``` is still listed in the [documentation](https://docs.microsoft.com/en-us/powershell/module/packagemanagement/install-package?view=powershell-5.1#parameters).
+* Implemented short term fix for version numbers that can't be read as ```[System.Version]```, like prereleases.
+  * For instance, ```PowerShellGet v3.0.12-beta```.
+  * Short term fix: Ignore such version numbers.
+  * See README.md for more info.
+
+### Improvements
+
+
+
+## v211220
+### Additions
+* Created a ```README.md```.
+
+### Fixes
+* Quick fix to handle beta/ pre-release versions
+  * Like [```PowerShellGet``` pre-release ```3.0.12-beta```](https://www.powershellgallery.com/packages/PowerShellGet/3.0.12-beta).
+  * In other words, version numbers that can't be parsed as ```[System.Version]```.
+  * Workaround: Don't validate such version numbers at all.
+  * Future: See ```README.md```. 
+
+### Improvements
+
+
+
 ## v210914
 ### Additions
 * Added installing scripts from PowerShellGallery defined in variable $ScriptsWanted.
