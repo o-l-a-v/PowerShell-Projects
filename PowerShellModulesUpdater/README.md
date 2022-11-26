@@ -41,4 +41,6 @@ If raw version can't be parsed, manually parse it.
 ###### Cons
 * Slow
 
-    
+
+## Inspiration and similar projects
+* https://github.com/JustinGrote/ModuleFast
