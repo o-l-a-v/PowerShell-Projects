@@ -1,73 +1,99 @@
 # Changelog
-## v220320
-### Additions
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [24.02.08] - 2024-02-08
+
+### Added
+* User context: Avoid installing to OneDrive (KFM) by overriding default install path `%USERPROFILE%\Documents\WindowsPowerShell\Modules` by:
+  * Set user context environmental variable `PSModulePath` to `%LOCALAPPDATA%\Microsoft\PowerShell\Modules`.
+  * Use `Microsoft.PowerShell.PSResourceGet\Save-PSResource` to override install path.
+  * Use own logic for detecting installed modules given scope.
+    * More info on how: <https://github.com/PowerShell/PSResourceGet/issues/627#issuecomment-1380881825>
+* Input parameter `-DoScripts` to control whether to touch PowerShell scripts.
+* Detect and use conflicting assembly for `Microsoft.PowerShell.PSResourceGet` if already present in the session. Related issues:
+  * 190228: <https://github.com/PowerShell/PSScriptAnalyzer/issues/1154>
+  * 240208: <https://github.com/PowerShell/PowerShell/issues/21201>
+  * 240208: <https://github.com/PowerShell/PowerShell/issues/21199>
+
+### Fixed
+* Function `Refresh-ModulesInstalled`: Wrongfully listed prerelease versions.
+* Use `[OutputType([System.Void])]` instead of `[OutputType($null)]` for functions that returns no output.
+* Detect, install and update scripts in non-standard directory.
+
+### Changed
+* Now using the new `Microsoft.PowerShell.PSResourceGet` module instead of `PackageManagement` and `PowerShellGet`.
+  * Self contained in `%LOCALAPPDATA%\Microsoft\PowerShell\PowerShellModulesUpdater`.
+* Made the script compatible with PowerShell Core (> 5.1) by:
+  * Removed `Requires -Edition Desktop`.
+  * Use `Test-Connection` if PowerShell Core, else `Test-NetConnection`.
+* Installing to user context now actually works, for both modules and scripts. More info on how under "Added".
+* Changed changelog syntax to ["Keep a Changelog"](https://keepachangelog.com/en), except for version numbers.
+
+## [221020] - 2022-10-20
+
+### Changed
+* Created a test to see if ```-AcceptLicense``` parameter is available for command ```PackageManagement\Install-Package```.
+* Converted some of the settings to input parameters (```param()```).
+
+## [220320] - 220320
+
+### Added
 * Make sure not to use PowerShellGet v3 if installed.
   * It's not ready yet IMO, and it's still in beta.
 
-### Fixes
-* Fixed that the script would not load the newest versions of required modules ```PowerShellGet``` and ```PackageManagement```.
+### Fixed
+* Script would not load the newest versions of required modules ```PowerShellGet``` and ```PackageManagement```.
 * Implemented short term fix for version numbers that can't be read as ```[System.Version]```, like prereleases.
   * For instance, ```PowerShellGet v3.0.12-beta```.
   * Short term fix: Ignore such version numbers.
   * See README.md for more info.
 
-### Improvements
 
+## [211220] - 2021-12-20
 
-
-## v211220
-### Additions
+### Added
 * Created a ```README.md```.
 
-### Fixes
+### Fixed
 * Quick fix to handle beta/ pre-release versions
   * Like [```PowerShellGet``` pre-release ```3.0.12-beta```](https://www.powershellgallery.com/packages/PowerShellGet/3.0.12-beta).
   * In other words, version numbers that can't be parsed as ```[System.Version]```.
   * Workaround: Don't validate such version numbers at all.
-  * Future: See ```README.md```. 
+  * Future: See ```README.md```.
 
-### Improvements
+## [210914] - 2021-09-14
 
-
-
-## v210914
-### Additions
+### Added
 * Added installing scripts from PowerShellGallery defined in variable $ScriptsWanted.
 * Added updating already installed scripts that origin from PowerShellGallery.
 
-### Fixes
-
-### Improvements
+### Changed
 * Some touchups on output to reflect that the script now does both modules and scripts.
 
+## [210819] - 2021-08-19
 
-
-## v210819
-### Additions
+### Added
 * Started on the mission of enabling the script to install modules either in user (CurrentUser) or system (AllUsers) context.
   * System context works, user context is not properly tested yet.
-  
-### Fixes
+
+### Fixed
 * Check for prerequired components and modules:
   * Better logic on using built in ```PowerShellGet``` and ```PackageManagement``` binaries until their modules are installed from PowerShellGallery.
 
-### Improvements
+### Changed
 
+## [210614] - 2021-06-14
 
-
-## v210614
-### Additions
-
-### Fixes
-
-### Improvements
+### Changed
 * Added quicker check for prerequired components and modules:
   * If ```PackageManagement``` exists as module type ```Script```, not just ```Binary```, we should be good.
 
+## [210503] - 2021-05-03
 
-
-## v210503
-### Additions
+### Added
 * Script version is now just ```YYMMdd``` for simplicity.
 * On a fresh client where the module has never run before, script can now install prerequirements and continue with the script in one run by loading newest versions of the prerequirements automatically.
 * Can now update and uninstall old version of ```PowerShellGet``` in one run, by simply:
@@ -76,246 +102,169 @@
   * Import (```Import-Module```) newest installed version to current session.
   * Uninstall old version.
 
-### Fixes
+### Fixed
 * Fixed some buggy text output to terminal.
 
-### Improvements
+### Changed
 * ```Write-Information``` instead of ```Write-Output``` for outputting text to terminal.
   * ```Write-Output``` is for returning objects.
   * ```Write-Information``` has no downsides with PowerShell 6 and newer, but for PowerShell 5.1 this output stream is:
     * Not enabled by default (requires ```$InformationPreference = 'Continue'```).
-	* Will not be visable if logging using ```Start-Transcript``` function.
+    * Will not be visable if logging using ```Start-Transcript``` function.
 * Will always start by updating prerequirement PowerShell modules ```PackageManagement``` and ```PowerShellGet```.
 * Using markdown syntax for headers for script output. One ```#``` for H1 etc.
 * Some syntax cleanup.
 
+## [1.9.1.0] - 2020-10-03
 
-
-## v1.9.1.0 201003
-### Additions
+### Added
 * Added check to see if powershellgallery.com is up and responding.
 * Added ability to harcode module versions to keep/ now remove.
 
-### Fixes
+## [1.9.0.0] - 2020-05-23
 
-### Improvements
-
-
-
-## v1.9.0.0 200523
-### Additions
+### Added
 * Function "Uninstall-ModuleManually" to speed up uninstall of outdated modules.
 * More useful modules to install.
 
-### Fixes
-
-### Improvements
+### Changed
 * Corrected info about some of the modules in the list of modules to install.
 
+## [1.8.0.0] - 2020-04-07
 
-
-## v1.8.0.0 200407
-### Additions
-
-### Fixes
-
-### Improvements
+### Changed
 * Now using "PackageManagemeng\Install-Package" instead of "Install-Module", because "Install-Module" does not set error variable $? correctly if it fails.
 * Some speed ups
-	* Use ".'Property'" instead of "Select-Object -ExpandProperty 'Property'
+  * Use ".'Property'" instead of "Select-Object -ExpandProperty 'Property'
 
+## [1.7.0.0] - 2020-03-23
 
-
-## v1.7.0.0 200323
-### Additions
-
-### Fixes
+### Fixed
 * Install-MissingSubModules
-	* Lists a installed module thats not available from PowerShell Gallery anymore as missing sub module.
-		* "Compare-Object" returns objects not in reference object AND difference object.
-		* Use .Where instead
+  * Lists a installed module thats not available from PowerShell Gallery anymore as missing sub module.
+    * "Compare-Object" returns objects not in reference object AND difference object.
+    * Use .Where instead
 
-### Improvements
+### Changed
 * Syntax fix, quotation marks on all dot properties
 * Some speed ups using .Where.
 
+## [1.6.0.0] - 2019-11-28
 
+### Added
+* Added setting for modules you don't want to get updated.
+  * $ModulesDontUpdate.
 
-## v1.6.0.0 191128
-### Additions
-* Added setting for modules you don't want to get updated. 
-	* $ModulesDontUpdate.
+## [1.5.2.0] - 2019-11-27
 
-### Fixes
-
-### Improvements
-
-
-
-## v1.5.2.0 191127
-### Additions
+### Added
 * Added stats.
 
-### Fixes
+### Fixed
 * Minor code refactoring.
 
-### Improvements
+## [1.5.1.0] - 2019-11-14
 
-
-
-## v1.5.1.0 191114
-### Additions
+### Added
 * Added "human readable" time start and time end output at the end, who reads time in the ToString('o') format anyway.
 
-### Fixes
-
-### Improvements
+### Changed
 * Uses Begin, Process and End in every function.
-* Use [OutputType] in each function.
+* Use `[OutputType]` in each function.
 * Better markdown syntax for changelog.
 
+## [1.5.0.0] - 2019-10-22
 
-
-## v1.5.0.0 191022
-### Additions
+### Added
 * Greatly improved speed by writing my own function for getting all installed versions of a module.
 
-### Fixes
+## [1.4.1.0] - 2019-08-08
 
-### Improvements
-
-
-
-## v1.4.1.0 190808
-### Additions
+### Added
 * Added option to automatically accept licenses when installing modules. Suddenly saw the first module requiring this: "Az.ApplicationMonitor".
 
-### Fixes
-
-### Improvements
+### Fixed
 * Fixed code style places I saw it lagged behind. Esthetics.
 
+## [1.4.0.0] - 2019-06-19
 
-
-## v1.4.0.0 190619
-### Additions
-
-### Fixes
-
-### Improvements
+### Changed
 * Prerequirements are now handled automatically in the script, no need to flip a boolean for that anymore.
 
+## [1.3.4.0] - 2019-06-16
 
-
-## v1.3.4.0 190616
-### Additions
+### Added
 * Better handling of uninstalling PackageManagement if module is updated during current session.
-	* If PackageManagement was updated during the same session, PowerShell must be closed and reopened before outdated version can be removed.
+  * If PackageManagement was updated during the same session, PowerShell must be closed and reopened before outdated version can be removed.
 * Will make sure that the user does not try to uninstall "PackageManagement" or "PowerShellGet".
 
-### Fixes
+## [1.3.3.0] - 2019-05-24
 
-### Improvements
-
-
-
-## v1.3.3.0 190524
-### Additions
-
-### Fixes
+### Fixed
 * Uninstall unwanted modules did not find any modules because the script scoped variable for installed modules is not just keeping the name of the modules anymore. Fixed with a Select-Object.
 * Other bugfixes since last release, lots of small stuff I don't remember. Nothing major.
 
-### Improvements
+### Changed
 * Better logic in the update installed modules function when a parent module is updated and submodules might have been updated aswell.
 
+## [1.3.2.0] - 2019-05-03
 
-
-## v1.3.2.0 190503
-### Additions
+### Added
 * Added check for Execution Policy, will attempt to fix it if necessary by setting it to "Unrestricted" just for current process.
 
-### Fixes
+## [1.3.1.0] - 2019-04-04
 
-### Improvements
-
-
-
-## v1.3.1.0 190404
-### Additions
+### Added
 * Added modules
-	* ImportExcel, can be used to import/modify/export to/from Excel files
+  * ImportExcel, can be used to import/modify/export to/from Excel files
 
-### Fixes
+### Fixed
 * Would fail on a clean install of Windows 10, fixed now
 
-### Improvements
+## [1.3.0.0] - 2019-04-01
 
-
-
-## v1.3.0.0 190401
-### Additions
-
-### Fixes
+### Fixed
 * Install-MissingSubModules
-	* Used punctuation as check weather a module was a sub module. This does not work for "Microsoft.Graph.Intune" for instance. Now it removes the last punctuation and name, and checks weather this name exist in the list of installed modules.
+  * Used punctuation as check weather a module was a sub module. This does not work for "Microsoft.Graph.Intune" for instance. Now it removes the last punctuation and name, and checks weather this name exist in the list of installed modules.
 
-### Improvements
+### Changed
 * UpdateInstalledModules
-	* If a submodule, punctuation in the name, will check once again what version is installed, in case parent module updated it.
+  * If a submodule, punctuation in the name, will check once again what version is installed, in case parent module updated it.
 
+## [1.2.0.1] - 2019-03-31
 
-
-## v1.2.0.1 190331
-### Additions
-
-### Fixes
+### Fixed
 * Used "$InstallMissingModules" instead of "$InstallMissingSubModules" for controlling weather the script should add missing sumodules. Type'o.
 
-### Improvements
+## [1.2.0.0] - 2019-03-24
 
-
-
-## v1.2.0.0 190324
-### Additions
+### Added
 * Added three new modules
-	* IntuneBackupAndRestore. John Seerden. Uses "MSGraphFunctions" module to backup and restore Intune config.
-	* MSGraphFunctions. John Seerden. Wrapper for Microsoft Graph Rest API.
-	* PSScriptAnalyzer. Microsoft. Used to analyze PowerShell scripts to look for common mistakes + give advice.
+  * IntuneBackupAndRestore. John Seerden. Uses "MSGraphFunctions" module to backup and restore Intune config.
+  * MSGraphFunctions. John Seerden. Wrapper for Microsoft Graph Rest API.
+  * PSScriptAnalyzer. Microsoft. Used to analyze PowerShell scripts to look for common mistakes + give advice.
 
-### Fixes
+### Fixed
 * Missed a "#" on one of the output headings
 * Install missing modules: Success status after install would not display.
 
-### Improvements
+## [1.1.0.0] - 2019-03-16
 
-
-
-## v1.1.0.0 190316
-### Additions
+### Added
 * Added changelog while I still remember the version history and changes.
 
-### Fixes
+### Fixed
 * Added ability to check for and install missing submodules.
-	* For instance: Az currently has 81 submodules, I only had about 60 installed. Now the script will add all submodules available from PowerShellGallery not already installed on the computer.
-	* Controllable by boolean $InstallMissingSubModules
+  * For instance: Az currently has 81 submodules, I only had about 60 installed. Now the script will add all submodules available from PowerShellGallery not already installed on the computer.
+  * Controllable by boolean $InstallMissingSubModules
 
-### Improvements
+## [1.0.1.0] - 2019-03-13
 
-
-
-## v1.0.1.0 190313
-### Additions
+### Added
 * Added ability to install prerequirements
-	* NuGet (Package Provider)
-	* PowerShellGet (PowerShell Module)
-	* Controllable by boolean $InstallPrerequirements
+  * NuGet (Package Provider)
+  * PowerShellGet (PowerShell Module)
+  * Controllable by boolean $InstallPrerequirements
 
-### Fixes
-
-### Improvements
-
-
-
-## v1.0.0.0 190310
+## [1.0.0.0] - 2019-03-10
 * Initial Release
