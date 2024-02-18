@@ -20,14 +20,11 @@
     .NOTES
         Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
         Created:  190310
-        Modified: 240208
-
-    .EXAMPLE
-        # Run from PowerShell ISE, system context
-        & $(Try{$psEditor.GetEditorContext().CurrentFile.Path}Catch{$psISE.CurrentFile.FullPath})
+        Modified: 240218
 
     .EXAMPLE
         # Run from PowerShell ISE or Visual Studio Code, user context
+        Set-ExecutionPolicy -Scope 'Process' -ExecutionPolicy 'Bypass' -Force
         & $(Try{$psEditor.GetEditorContext().CurrentFile.Path}Catch{$psISE.CurrentFile.FullPath}) -SystemContext $false
 
     .EXAMPLE
@@ -76,8 +73,6 @@ Param (
 ## Modules you want to install and keep installed
 $ModulesWanted = [string[]]$(
     'AIPService',                             # Microsoft. Used for managing Microsoft Azure Information Protection (AIP).
-    'AnyPackage',                             # AnyPackage / Thomas Nieto. Spiritual successor to OneGet / PackageManagement.
-    'AnyPackage.PSResourceGet'                # AnyPackage / Thomas Nieto. PSResourceGet for AnyPackage.
     'Az',                                     # Microsoft. Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
     'AzSK',                                   # Microsoft. Azure Secure DevOps Kit. https://azsk.azurewebsites.net/00a-Setup/Readme.html
     'AzViz',                                  # Prateek Singh. Used for visualizing a Azure environment.
@@ -134,6 +129,8 @@ $ModulesWanted = [string[]]$(
 
 ## Modules you don't want - Will Remove Every Related Module, for AzureRM for instance will also search for AzureRM.*
 $ModulesUnwanted = [string[]]$(
+    'AnyPackage',                             # AnyPackage / Thomas Nieto. Spiritual successor to OneGet / PackageManagement.
+    'AnyPackage.PSResourceGet'                # AnyPackage / Thomas Nieto. PSResourceGet for AnyPackage.
     'Az.Insights',                            # Name changed to "Az.Monitor": https://learn.microsoft.com/en-us/powershell/azure/migrate-az-1.0.0#module-name-changes
     'Az.Profile',                             # Name changed to "Az.Accounts": https://learn.microsoft.com/en-us/powershell/azure/migrate-az-1.0.0#module-name-changes
     'Az.Tags',                                # Functionality merged into "Az.Resources": https://learn.microsoft.com/en-us/powershell/azure/migrate-az-1.0.0#module-name-changes
@@ -184,6 +181,9 @@ $WarningPreference = 'Continue'
 
 ## Fix for Progress if run using F8 on the example line in script header
 $Global:ProgressPreference = $ProgressPreference
+
+## Indentation because tabulation ("`t") is trated differently in PowerShell ISE than the PowerShell terminal
+$null = Set-Variable -Option 'AllScope', 'ReadOnly' -Force -Name 'Indentation' -Value '  '
 #endregion Settings & Variables
 
 
@@ -217,14 +217,14 @@ function Get-ModuleInstalledVersions {
     # Process
     Process {
         # Assets
-        $Path = [string] '{0}\{1}' -f $Script:ModulesPath, $ModuleName
+        $Path = [string] [System.IO.Path]::Combine($Script:ModulesPath,$ModuleName)
 
         # Return installed versions of $ModuleName
         [System.Version[]](
             [System.IO.Directory]::GetDirectories($Path).Where{
-                [System.IO.File]::Exists(('{0}\PSGetModuleInfo.xml' -f $_))
+                [System.IO.File]::Exists([System.IO.Path]::Combine($_,'PSGetModuleInfo.xml'))
             }.ForEach{
-                $_.Split('\')[-1]
+                $_.Split([System.IO.Path]::DirectorySeparatorChar)[-1]
             }.Where{
                 Try {
                     $null = $_ -as [System.Version]
@@ -266,7 +266,7 @@ function Get-PowerShellGalleryPackageLatestVersion {
 
     # Begin
     Begin {
-        if (-not$(Try{$null = Get-Variable -Name 'Random' -Scope 'Script' 2>$null; $?}Catch{$false})) {
+        if (-not$(Try{$null = Get-Variable -Name 'Random' -Scope 'Script' -ErrorAction 'SilentlyContinue'; $?}Catch{$false})) {
             $null = Set-Variable -Name 'Random' -Scope 'Script' -Option 'ReadOnly' -Force -Value (
                 [random]::new()
             )
@@ -322,8 +322,8 @@ function Get-PowerShellGalleryPackageLatestVersion {
 
 
 #region    Modules
-#region    Refresh-ModulesInstalled
-function Refresh-ModulesInstalled {
+#region    Get-ModulesInstalled
+function Get-ModulesInstalled {
     <#
         .SYNAPSIS
             Gets all currently installed modules.
@@ -404,7 +404,7 @@ function Refresh-ModulesInstalled {
     End {
     }
 }
-#endregion Refresh-ModulesInstalled
+#endregion Get-ModulesInstalled
 
 
 
@@ -427,12 +427,12 @@ function Update-ModulesInstalled {
     # Process
     Process {
         # Refresh Installed Modules variable
-        $null = Refresh-ModulesInstalled -ForceRefresh
+        $null = Get-ModulesInstalled -ForceRefresh
 
         # Skip if no installed modules was found
         if ($Script:ModulesInstalled.'Count' -le 0) {
             Write-Information -MessageData ('No installed modules where found, no modules to update.')
-            Break
+            return
         }
 
         # Help Variables
@@ -450,7 +450,11 @@ function Update-ModulesInstalled {
             $VersionInstalled = [System.Version]$($Script:ModulesInstalled.Where{$_.'Name' -eq $ModuleName}.'Version')
 
             # Get Version Installed - Get fresh version number if newer version is available and current module is a sub module
-            if ([System.Version]($VersionAvailable) -gt [System.Version]$($VersionInstalled) -and $ModuleName -like '*?.?*' -and [string[]]$($ModulesInstalledNames) -contains [string]$($ModuleName.Replace(('.{0}' -f ($ModuleName.Split('.')[-1])),''))) {
+            if (
+                [System.Version]($VersionAvailable) -gt [System.Version]$($VersionInstalled) -and
+                $ModuleName -like '*?.?*' -and
+                [string[]]$($ModulesInstalledNames) -contains [string]$($ModuleName.Replace(('.{0}' -f ($ModuleName.Split('.')[-1])),''))
+            ) {
                 $VersionInstalled = [System.Version](Get-ModuleInstalledVersions -ModuleName $ModuleName | Sort-Object -Descending | Select-Object -First 1)
             }
 
@@ -466,14 +470,14 @@ function Update-ModulesInstalled {
 
             # Compare Version Installed vs Version Available
             if ([System.Version]$($VersionInstalled) -ge [System.Version]$($VersionAvailable)) {
-                Write-Information -MessageData ('{0}Current version is latest version.' -f ("`t"))
+                Write-Information -MessageData ('{0}Current version is latest version.' -f $Indentation)
                 Continue ForEachModule
             }
             else {
-                Write-Information -MessageData ('{0}Newer version available, v{1}.' -f ("`t",$VersionAvailable.ToString()))
+                Write-Information -MessageData ('{0}Newer version available, v{1}.' -f $Indentation, $VersionAvailable.ToString())
                 if ([bool]$($null = Microsoft.PowerShell.PSResourceGet\Find-PSResource -Type 'Module' -Repository 'PSGallery' -Name $ModuleName -ErrorAction 'SilentlyContinue';$?)) {
                     if ($ModulesDontUpdate -contains $ModuleName) {
-                        Write-Information -MessageData ('{0}{0}Will not update as module is specified in script settings. ($ModulesDontUpdate).' -f ("`t",$Success.ToString))
+                        Write-Information -MessageData ('{0}Will not update as module is specified in script settings. ($ModulesDontUpdate).' -f ($Indentation*2), $Success.ToString)
                     }
                     else {
                         # Install module
@@ -492,13 +496,13 @@ function Update-ModulesInstalled {
                         if ($Success) {
                             $Success = [bool](
                                 [System.IO.Directory]::Exists(
-                                    ('{0}\{1}\{2}' -f $Script:ModulesPath, $ModuleName, $VersionAvailable.ToString())
+                                    [System.IO.Path]::Combine($Script:ModulesPath, $ModuleName, $VersionAvailable.ToString())
                                 )
                             )
                         }
 
                         # Output success
-                        Write-Information -MessageData ('{0}Install success? {1}' -f ([string]$("`t" * 2),$Success.ToString()))
+                        Write-Information -MessageData ('{0}Install success? {1}' -f ($Indentation * 2), $Success.ToString())
 
                         # Count as installed if success
                         if ($Success) {
@@ -562,7 +566,7 @@ function Install-ModulesMissing {
     # Process
     Process {
         # Refresh Installed Modules variable
-        $null = Refresh-ModulesInstalled
+        $null = Get-ModulesInstalled
 
 
         # Help Variables
@@ -578,17 +582,23 @@ function Install-ModulesMissing {
 
             # Install if not already installed
             if ($ModulesInstalledNames.Where{$_ -eq $ModuleName}.'Count' -ge 1) {
-                Write-Information -MessageData ('{0}Already Installed. Next!' -f "`t")
+                Write-Information -MessageData ('{0}Already Installed. Next!' -f $Indentation)
             }
             else {
-                Write-Information -MessageData ('{0}Not already installed. Installing.' -f "`t")
-                if ([bool]$($null = Microsoft.PowerShell.PSResourceGet\Find-PSResource -Type 'Module' -Repository 'PSGallery' -Name $ModuleName -ErrorAction 'SilentlyContinue';$?)) {
+                Write-Information -MessageData ('{0}Not already installed. Installing.' -f $Indentation)
+                $PSResource = Microsoft.PowerShell.PSResourceGet\Find-PSResource -Type 'Module' -Repository 'PSGallery' -Name $ModuleName -ErrorAction 'SilentlyContinue'
+                if ($? -and -not [string]::IsNullOrEmpty($PSresource.'Name')) {
+                    # Special case if Unix
+                    if ($PSVersionTable.'Platform' -eq 'Unix' -and -not $PSResource.'Tags'.Contains('PSEdition_Core')) {
+                        Write-Information -MessageData ('{0}This module does not seem to support Unix, thus skipping it.' -f ($Indentation*2))
+                        Continue
+                    }
                     # Install missing module
                     ## Assets
                     $ModulesToInstall = [string[]]($ModuleName)
                     ## Find dependencies
                     $ModulesToInstall += [string[]](
-                        (Microsoft.PowerShell.PSResourceGet\Find-PSResource -Type 'Module' -Repository 'PSGallery' -Name $ModuleName).'Dependencies'.'Name'.Where{
+                        $PSResource.'Dependencies'.'Name'.Where{
                             $_.StartsWith('{0}.' -f $ModuleName)
                         }
                     )
@@ -607,7 +617,7 @@ function Install-ModulesMissing {
                     )
 
                     # Output success
-                    Write-Information -MessageData ('{0}Install success? {1}' -f ([string]$("`t" * 2),$Success.ToString()))
+                    Write-Information -MessageData ('{0}Install success? {1}' -f ($Indentation * 2),$Success.ToString())
 
                     # Count if success
                     if ($Success) {
@@ -651,12 +661,12 @@ function Install-SubModulesMissing {
     # Process
     Process {
         # Refresh Installed Modules variable
-        $null = Refresh-ModulesInstalled
+        $null = Get-ModulesInstalled
 
         # Skip if no installed modules was found
         if ($Script:ModulesInstalled.'Count' -le 0) {
             Write-Information -MessageData ('No installed modules where found, no modules to check against.')
-            Break
+            return
         }
 
         # Help Variables - Both Foreach
@@ -704,7 +714,7 @@ function Install-SubModulesMissing {
             if ($SubModulesAvailable.'Count' -eq 0) {
                 Write-Information -MessageData (
                     '{0}Found {1} available sub module{2}.' -f (
-                        "`t",
+                        $Indentation,
                         $SubModulesAvailable.'Count'.ToString(),
                         [string]$(if($SubModulesAvailable.'Count' -ne 1){'s'})
                     )
@@ -726,7 +736,7 @@ function Install-SubModulesMissing {
             ## Output result
             Write-Information -MessageData (
                 '{0}Found {1} missing sub module{2}.' -f (
-                    "`t",
+                    $Indentation,
                     $SubModulesMissing.'Count'.ToString(),
                     [string]$(if($SubModulesMissing.'Count' -ne 1){'s'})
                 )
@@ -744,7 +754,7 @@ function Install-SubModulesMissing {
                     # Present Current Sub Module
                     Write-Information -MessageData (
                         '{0}{1}/{2} {3}' -f (
-                            [string]("`t" * 2),
+                            ($Indentation * 2),
                             ($IC++).ToString($IDigits),
                             $ICTotal,
                             $SubModule.'Name'
@@ -769,13 +779,13 @@ function Install-SubModulesMissing {
                     if ($Success) {
                         $Success = [bool](
                             [System.IO.Directory]::Exists(
-                                ('{0}\{1}\{2}' -f $Script:ModulesPath, $SubModule.'Name', $SubModule.'Version'.ToString())
+                                [System.IO.Path]::Combine($Script:ModulesPath, $SubModule.'Name', $SubModule.'Version'.ToString())
                             )
                         )
                     }
 
                     # Output success
-                    Write-Information -MessageData ('{0}Install success? {1}' -f ("`t" * 3), $Success.ToString())
+                    Write-Information -MessageData ('{0}Install success? {1}' -f ($Indentation * 3), $Success.ToString())
 
                     # Count as installed if success
                     if ($Success) {
@@ -832,12 +842,12 @@ function Uninstall-ModuleManually {
     # Process
     Process {
         # Create path to module
-        $ModulePath = [string] '{0}\{1}\{2}' -f $Script:ModulesPath, $ModuleName, $Version.ToString()
+        $ModulePath = [string] [System.IO.Path]::Combine($Script:ModulesPath, $ModuleName, $Version.ToString())
 
         # If path does not exist, try to check for versions and create path more dynamically
         if (-not [System.IO.Directory]::Exists($ModulePath)) {
             # Create module path
-            $ModulePath = [string]('{0}\{1}' -f $Script:ModulesPath, $ModuleName)
+            $ModulePath = [string] [System.IO.Path]::Combine($Script:ModulesPath, $ModuleName)
 
             # Get all versions
             $Versions = [PSCustomObject[]](
@@ -867,12 +877,20 @@ function Uninstall-ModuleManually {
         }
 
         # Unload module if currently in use
-        if ($(Microsoft.PowerShell.Core\Get-Module -Name $ModuleName).Where{$_.'Path'.StartsWith(('{0}\' -f $ModulePath))}.'Count' -gt 0) {
+        if (
+            $(Microsoft.PowerShell.Core\Get-Module -Name $ModuleName).Where{
+                $_.'Path'.StartsWith(($ModulePath + [System.IO.Path]::DirectorySeparatorChar))
+            }.'Count' -gt 0
+        ) {
             $null = Remove-Module -Name $ModuleName -Force
         }
 
         # Delete folder if it exists / Uninstall module version
-        if ([bool]$(Try{$null = [System.Version]$ModulePath.Split('\')[-1];$?}Catch{$false}) -and [System.IO.Directory]::Exists($ModulePath)) {
+        if (
+            [bool]$(
+                Try{$null = [System.Version]$ModulePath.Split([System.IO.Path]::DirectorySeparatorChar)[-1];$?}Catch{$false}) -and
+                [System.IO.Directory]::Exists($ModulePath)
+            ) {
             $null = [System.IO.Directory]::Delete($ModulePath,$true)
             if ($? -and -not [System.IO.Directory]::Exists($ModulePath)) {
                 return
@@ -895,7 +913,7 @@ function Uninstall-ModulesOutdated {
 
         .Description
             Uninstalls outdated modules / currently installed modules with more than one version.
-            * Uses workaround from function Refresh-ModulesInstalled to handle version numbers that can't be parsed as [System.Version].
+            * Uses workaround from function Get-ModulesInstalled to handle version numbers that can't be parsed as [System.Version].
     #>
 
     # Input parameters
@@ -910,7 +928,7 @@ function Uninstall-ModulesOutdated {
     # Process
     Process {
         # Refresh Installed Modules variable
-        $null = Refresh-ModulesInstalled -AllVersions -ForceRefresh
+        $null = Get-ModulesInstalled -AllVersions -ForceRefresh
 
         # Skip if no installed modules were found
         if ($Script:ModulesInstalled.'Count' -le 0) {
@@ -944,7 +962,7 @@ function Uninstall-ModulesOutdated {
             )
             Write-Information -MessageData (
                 '{0}{1} got {2} installed version{3} ({4}).' -f (
-                    "`t",
+                    $Indentation,
                     $Module.'Name',
                     $VersionsAll.'Count'.ToString(),
                     [string]$(if($VersionsAll.'Count' -gt 1){'s'}),
@@ -957,11 +975,11 @@ function Uninstall-ModulesOutdated {
 
             # Uninstall all but newest
             foreach ($ModuleVersion in $ModuleOldVersions) {
-                Write-Information -MessageData ('{0}{0}Uninstalling module "{1}" version "{2}".' -f "`t", $Module.'Name', $ModuleVersion.'Version'.ToString())
+                Write-Information -MessageData ('{0}Uninstalling module "{1}" version "{2}".' -f ($Indentation*2), $Module.'Name', $ModuleVersion.'Version'.ToString())
 
                 # Check if current version is not to be uninstalled / specified in $ModulesVersionsDontRemove
                 if ($([System.Version[]]($ModulesVersionsDontRemove.$($Module.'Name')) -contains $([System.Version]($ModuleVersion.'Version')))) {
-                    Write-Information -MessageData ('{0}{0}{0}This version is not to be uninstalled because it`s specified in $ModulesVersionsDontRemove.' -f ("`t"))
+                    Write-Information -MessageData ('{0}This version is not to be uninstalled because it`s specified in $ModulesVersionsDontRemove.' -f ($Indentation*3))
                 }
                 else {
                     # Uninstall
@@ -982,7 +1000,7 @@ function Uninstall-ModulesOutdated {
                     )
 
                     # Output
-                    Write-Information -MessageData ('{0}{0}{0}Success? {1}.' -f ("`t",$Success.ToString()))
+                    Write-Information -MessageData ('{0}Success? {1}.' -f ($Indentation*3), $Success.ToString())
                     if ($Success) {
                         # Stats
                         $Script:ModulesUninstalledOutdated += [string[]]($Module.'Name')
@@ -1030,12 +1048,12 @@ function Uninstall-ModulesUnwanted {
     # Process
     Process {
         # Refresh Installed Modules variable
-        $null = Refresh-ModulesInstalled -ForceRefresh
+        $null = Get-ModulesInstalled -ForceRefresh
 
         # Skip if no installed modules was found
         if ($Script:ModulesInstalled.'Count' -le 0) {
             Write-Information -MessageData ('No installed modules where found, no modules to uninstall.')
-            Break
+            return
         }
 
         # Find out if we got unwated modules installed based on input parameter $ModulesUnwanted vs $InstalledModulesAll
@@ -1074,7 +1092,7 @@ function Uninstall-ModulesUnwanted {
                 # Write information
                 Write-Information -MessageData (
                     '{0}{1}/{2} {3}{4}' -f (
-                        "`t",
+                        $Indentation,
                         ($C++).ToString($Digits),
                         $CTotal,
                         $Module,
@@ -1083,11 +1101,11 @@ function Uninstall-ModulesUnwanted {
                 )
 
                 # Remove Current Module
-                $null = [System.IO.Directory]::Delete(('{0}\{1}' -f $Script:ModulesPath, $Module),$true) 2>$null
+                $null = [System.IO.Directory]::Delete([System.IO.Path]::Combine($Script:ModulesPath, $Module),$true) 2>$null
                 $Success = [bool]$($?)
 
                 # Write Out Success
-                Write-Information -MessageData ('{0}{0}Success? {1}.' -f ("`t",$Success.ToString()))
+                Write-Information -MessageData ('{0}Success? {1}.' -f ($Indentation*2), $Success.ToString())
                 if ($Success) {
                     # Stats
                     $Script:ModulesUninstalledUnwanted += [string[]]($Module)
@@ -1148,51 +1166,53 @@ function Install-ScriptsMissing {
 
     # Process
     Process {
-        $Scripts.ForEach{
+        foreach ($Script in $Scripts) {
             Write-Information -MessageData (
                 '{0} / {1} "{2}"' -f (
-                    (1 + $Scripts.IndexOf($_)).ToString('0' * $Scripts.'Count'.ToString().'Length'),
+                    (1 + $Scripts.IndexOf($Script)).ToString('0' * $Scripts.'Count'.ToString().'Length'),
                     $Scripts.'Count'.Tostring(),
-                    $_
+                    $Script
                 )
             )
-            if ($InstalledScripts.'Name' -contains $_) {
+            if ($InstalledScripts.'Name' -contains $Script) {
                 Write-Information -MessageData 'Already installed.'
             }
             else {
                 Write-Information -MessageData 'Not already installed.'
-                if (
-                    [string]::IsNullOrEmpty(
-                        (Microsoft.PowerShell.PSResourceGet\Find-PSResource -Type 'Script' -Repository 'PSGallery' -Name $_).'Name'
-                    )
-                ) {
-                    Write-Warning -Message 'Not found on PowerShellGallery.'
-                }
-                else {
+                $PSResource = Microsoft.PowerShell.PSResourceGet\Find-PSResource -Type 'Script' -Repository 'PSGallery' -Name $Script -ErrorAction 'SilentlyContinue'
+                if ($? -and -not [string]::IsNullOrEmpty($PSResource.'Name')) {
+                    # Special case if Unix
+                    if ($PSVersionTable.'Platform' -eq 'Unix' -and -not $PSResource.'Tags'.Contains('PSEdition_Core')) {
+                        Write-Information -MessageData ('{0}This script does not seem to support Unix, thus skipping it.' -f ($Indentation*2))
+                        Continue
+                    }
                     # Install script
                     $null = Microsoft.PowerShell.PSResourceGet\Save-PSResource -Repository 'PSGallery' -TrustRepository `
-                        -IncludeXml -SkipDependencyCheck -Path $Script:ScriptsPath -Name $_
+                        -IncludeXml -SkipDependencyCheck -Path $Script:ScriptsPath -Name $Script
                     # Move XML file to "InstalledScriptInfos"
                     $Local:Source = [string] [System.IO.Path]::Combine(
                         $Script:ScriptsPath,
-                        '{0}_InstalledScriptInfo.xml' -f $_
+                        '{0}_InstalledScriptInfo.xml' -f $Script
                     )
                     $Local:Destination = [string] [System.IO.Path]::Combine(
                         $InstalledScriptsInfos,
-                        '{0}_InstalledScriptInfo.xml' -f $_
+                        '{0}_InstalledScriptInfo.xml' -f $Script
                     )
                     if ([System.IO.File]::Exists($Local:Source)) {
                         $null = Move-Item -Path $Local:Source -Destination $Local:Destination -Force
                     }
-                    # Add to stats
-                    $Script:ScriptsMissing += [string[]]($_)
                     # Output success
                     if ([System.IO.File]::Exists($Local:Destination)) {
-                        Write-Information -MessageData ('{0}Successfully installed.' -f "`t")
+                        Write-Information -MessageData ('{0}Successfully installed.' -f $Indentation)
+                        # Add to stats
+                        $Script:ScriptsMissing += [string[]]($Script)
                     }
                     else {
-                        Write-Warning -Message ('{0}Failed.' -f "`t")
+                        Write-Warning -Message ('{0}Failed.' -f $Indentation)
                     }
+                }
+                else {
+                    Write-Warning -Message 'Not found on PowerShellGallery.'
                 }
             }
         }
@@ -1279,7 +1299,7 @@ function Update-ScriptsInstalled {
                     # Add to stats
                     $Script:ScriptsUpdated += [string[]]($_.'Name')
                     # Output success
-                    Write-Information -MessageData ('{0}Successfully installed.' -f "`t")
+                    Write-Information -MessageData ('{0}Successfully installed.' -f $Indentation)
                 }
                 else {
                     Write-Information -MessageData 'No newer version available.'
@@ -1302,12 +1322,18 @@ function Set-PSModulePathUserContext {
     [OutputType([System.Void])]
     Param()
 
-    Begin {}
+    Begin {
+    }
 
     Process {
+        # Exit function if running on Linux
+        if ($PSVersionTable.'Platform' -eq 'Unix') {
+            return
+        }
+
         # Assets
         $PSModulePathWanted = [string] '%LOCALAPPDATA%\Microsoft\PowerShell\Modules'
-        $PSModulePathWantedResolved = [string] (cmd /c ('echo {0}' -f $PSModulePathWanted))
+        $PSModulePathWantedResolved = [string] [System.Environment]::ExpandEnvironmentVariables($PSModulePathWanted)
         $RegistryPath = [string] 'Registry::HKEY_CURRENT_USER\Environment'
 
         # Create path if it does not exist
@@ -1364,8 +1390,8 @@ function Set-PSModulePathUserContext {
 
 
 
-#region    Output-Statistics
-function Output-Statistics {
+#region    Write-Statistics
+function Write-Statistics {
     <#
         .SYNOPSIS
             Outputs statistics after script has ran.
@@ -1404,7 +1430,7 @@ function Output-Statistics {
     End {
     }
 }
-#endregion Output-Statistics
+#endregion Write-Statistics
 #endregion Functions
 
 
@@ -1435,38 +1461,52 @@ $null = New-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'Scope' -Va
 
 ## Modules path
 ### Root
-$null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'ModulesPathRoot' -Value (
+$null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'PSResourceHomeUser' -Value (
     [string](
         $(
-            if ($SystemContext) {
-                '{0}\{1}PowerShell' -f $(
-                    if ([System.Environment]::Is64BitOperatingSystem) {
-                        $env:ProgramW6432
-                    }
-                    else {
-                        ${env:ProgramFiles(x86)}
-                    }
-                ),$(
-                    if ($PSVersionTable.'PSEdition' -eq 'Desktop') {
-                        'Windows'
-                    }
-                )
+            if ($PSVersionTable.'Platform' -eq 'Unix') {
+                [System.IO.Path]::Combine($HOME,'.local','share','powershell')
             }
             else {
-                '{0}\Microsoft\PowerShell' -f $env:LOCALAPPDATA
+                [System.IO.Path]::Combine($env:LOCALAPPDATA,'Microsoft','PowerShell')
             }
         )
     )
 )
+$null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'PSResourceHomeMachine' -Value (
+    [string](
+        $(
+            if ($PSVersionTable.'Platform' -eq 'Unix') {
+                '/usr/local/share/powershell'
+            }
+            else {
+                [System.IO.Path]::Combine(
+                    $(
+                        if ([System.Environment]::Is64BitOperatingSystem) {
+                            $env:ProgramW6432
+                        }
+                        else {
+                            ${env:ProgramFiles(x86)}
+                        }
+                    ),
+                    '{0}PowerShell' -f $(if($PSVersionTable.'PSEdition' -eq 'Desktop') {'Windows'})
+                )
+            }
+        )
+    )
+)
+$null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'ModulesPathRoot' -Value (
+    [string]($(if($SystemContext){$PSResourceHomeMachine}else{$PSResourceHomeUser}))
+)
 
 ### Modules path
 $null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'ModulesPath' -Value (
-    [string] '{0}\Modules' -f $Script:ModulesPathRoot
+    [string] [System.IO.Path]::Combine($Script:ModulesPathRoot,'Modules')
 )
 
 ### Scripts path
 $null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'ScriptsPath' -Value (
-    [string] '{0}\Scripts' -f $Script:ModulesPathRoot
+    [string] [System.IO.Path]::Combine($Script:ModulesPathRoot,'Scripts')
 )
 
 ### Create paths if they don't exist
@@ -1602,7 +1642,7 @@ if (-not [string]::IsNullOrEmpty($PsrgConflictingAssembly.'ManifestModule'.'Name
 ## Else - Use separate version maintained by this script
 else {
     # Assets
-    $ScriptHomePath = [string] '{0}\Microsoft\PowerShell\PowerShellModulesUpdater' -f $env:LOCALAPPDATA
+    $ScriptHomePath = [string] [System.IO.Path]::Combine($PSResourceHomeUser,'PowerShellModulesUpdater')
     $ScriptModulePath = [string] [System.IO.Path]::Combine($ScriptHomePath,'Modules')
     $PsrgParentDirectory = [string] [System.IO.Path]::Combine($ScriptModulePath,'Microsoft.PowerShell.PSResourceGet')
 
@@ -1619,7 +1659,7 @@ else {
                     [System.IO.File]::Exists([System.IO.Path]::Combine($_,'Microsoft.PowerShell.PSResourceGet.psd1'))
                 }.ForEach{
                     Try {
-                        $_.Split('\')[-1] -as [System.Version]
+                        $_.Split([System.IO.Path]::DirectorySeparatorChar)[-1] -as [System.Version]
                     }
                     Catch {
                         '0.0'
@@ -1641,7 +1681,6 @@ else {
     )
     ## Create expected install directory based on latest version info
     $PsrgInstallDirectory = [string] [System.IO.Path]::Combine($PsrgParentDirectory,$PsrgLatestVersion.ToString())
-    $PsrgImportFile = [string] [System.IO.Path]::Combine($PsrgInstallDirectory,'Microsoft.PowerShell.PSResourceGet.psd1')
     $PsrgImportDll  = [string] [System.IO.Path]::Combine($PsrgInstallDirectory,'Microsoft.PowerShell.PSResourceGet.dll')
 
     # Install latest version
@@ -1665,7 +1704,10 @@ else {
 
         # Assets
         $PsrgUri = [string] 'https://www.powershellgallery.com/api/v2/package/Microsoft.PowerShell.PSResourceGet/{0}' -f $PsrgLatestVersion
-        $PsrgDownloadFilePath = [string] '{0}\Microsoft.PowerShell.PSResourceGet.{1}.zip' -f $env:TEMP, $PsrgLatestversion.ToString()
+        $PsrgDownloadFilePath = [string] [System.IO.Path]::Combine(
+            $(if($PSVersionTable.'Platform' -eq 'Unix'){'/tmp'}else{$env:TEMP}),
+            'Microsoft.PowerShell.PSResourceGet.{0}.zip' -f $PsrgLatestversion.ToString()
+        )
 
         # Unload module if already loaded
         $null = Get-Module -Name 'Microsoft.PowerShell.PSResourceGet' | Remove-Module
@@ -1721,7 +1763,7 @@ if ($UninstallUnwantedModules) {
     Uninstall-ModulesUnwanted -ModulesUnwanted $ModulesUnwanted
 }
 else {
-    Write-Information -MessageData ('{0}Uninstall unwanted modules is set to $false.' -f "`t")
+    Write-Information -MessageData ('{0}Uninstall unwanted modules is set to $false.' -f $Indentation)
 }
 
 ## Update Installed Modules
@@ -1730,7 +1772,7 @@ if ($InstallUpdatedModules) {
     Update-ModulesInstalled
 }
 else {
-    Write-Information -MessageData ('{0}Update installed modules is set to $false.' -f "`t")
+    Write-Information -MessageData ('{0}Update installed modules is set to $false.' -f $Indentation)
 }
 
 ## Install Missing Modules
@@ -1739,7 +1781,7 @@ if ($InstallMissingModules) {
     Install-ModulesMissing -ModulesWanted $ModulesWanted
 }
 else {
-    Write-Information -MessageData ('{0}Install missing modules is set to $false.' -f "`t")
+    Write-Information -MessageData ('{0}Install missing modules is set to $false.' -f $Indentation)
 }
 
 ## Installing Missing Sub Modules
@@ -1748,7 +1790,7 @@ if ($InstallMissingSubModules) {
     Install-SubModulesMissing
 }
 else {
-    Write-Information -MessageData ('{0}Install missing sub modules is set to $false.' -f "`t")
+    Write-Information -MessageData ('{0}Install missing sub modules is set to $false.' -f $Indentation)
 }
 
 ## Remove old modules
@@ -1757,7 +1799,7 @@ if ($UninstallOutdatedModules) {
     Uninstall-ModulesOutdated
 }
 else {
-    Write-Information -MessageData ('{0}Remove outdated modules is set to $false.' -f "`t")
+    Write-Information -MessageData ('{0}Remove outdated modules is set to $false.' -f $Indentation)
 }
 
 
@@ -1780,7 +1822,7 @@ if ($DoScripts) {
 # Write Stats
 Write-Information -MessageData ('{0}# Finished.' -f ([System.Environment]::NewLine * 2))
 Write-Information -MessageData ('## Stats')
-Output-Statistics
+Write-Statistics
 Write-Information -MessageData ('{0}## Time' -f [System.Environment]::NewLine)
 Write-Information -MessageData ('Start time:    {0} ({1}).' -f $Script:TimeTotalStart.ToString('HH\:mm\:ss'), $Script:TimeTotalStart.ToString('o'))
 Write-Information -MessageData ('End time:      {0} ({1}).' -f (($Script:TimeTotalEnd = [datetime]::Now).ToString('HH\:mm\:ss'),$Script:TimeTotalEnd.ToString('o')))

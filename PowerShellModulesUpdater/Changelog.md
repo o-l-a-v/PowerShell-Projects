@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [24.02.18] - 2024-02-18
+
+### Added
+
+* Linux support: Very much beta, not properly tested.
+
+### Changed
+
+* Make script output indentation / tabulation uniform across terminals by hardcoding indention to two whitespaces with varible `$Indentation`.
+  * Because it's up to the host terminal application to handle tab expansion.
+    * <https://github.com/MicrosoftDocs/PowerShell-Docs/issues/10533>
+  * Tab expansion varies between PowerShell ISE (4 whitespaces) and the regular PowerShell terminal (8 whitespaces).
+
+### Fixed
+
+* PSScriptAnalyzer complaints:
+  * Use approved verbs for functions.
+    * `Output-Statistics` -> `Write-Statistics`
+    * `Refresh-ModulesInstalled` -> `Get-ModulesInstalled`.
+  * Use `-ErrorAction SilentlyContinue` because PSScriptAnalyzer falsefully detects it as `PSPossibleIncorrectUsageOfRedirectionOperator`.
+* Exiting functions that has `[OutputType([System.Void])]` using `Break` exited the whole script, now using `return` instead.
+
 ## [24.02.08] - 2024-02-08
 
 ### Added

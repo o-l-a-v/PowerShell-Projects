@@ -29,6 +29,7 @@ Script is self contained and maintains its' own version of the `Microsoft.PowerS
 
 
 ### Long term
+* [x] Linux support.
 * [ ] Speed up by not doing everything sequentially.
   * Modules not sharing name or author should be able to install and update simultaneously.
     * Find out all modules to install, then install with `-SkipDependencyCheck` in parallel?
