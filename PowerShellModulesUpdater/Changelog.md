@@ -1,10 +1,21 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+* Changelog format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
+* Versioning adheres to [Semantic Versioning](https://semver.org/).
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [24.02.18] - 2024-02-18
+## [1.18.1] - 2024-03-02
+
+### Changed
+
+* Versioning is now using [Semantic Versioning](https://semver.org/) again.
+
+### Fixed
+
+* In PowerShell 5.1, doing string `.Contains()` on an empty attribute throws an error.
+  * Fix: Do `-not [string]::IsNullOrEmpty($_.'<attribute>')` before `$_.'<attribute>'.Contains('<something>')`.
+
+## [1.18.0] - 2024-02-18
 
 ### Added
 
@@ -26,7 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   * Use `-ErrorAction SilentlyContinue` because PSScriptAnalyzer falsefully detects it as `PSPossibleIncorrectUsageOfRedirectionOperator`.
 * Exiting functions that has `[OutputType([System.Void])]` using `Break` exited the whole script, now using `return` instead.
 
-## [24.02.08] - 2024-02-08
+## [1.17.0] - 2024-02-08
 
 ### Added
 * User context: Avoid installing to OneDrive (KFM) by overriding default install path `%USERPROFILE%\Documents\WindowsPowerShell\Modules` by:
@@ -54,13 +65,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * Installing to user context now actually works, for both modules and scripts. More info on how under "Added".
 * Changed changelog syntax to ["Keep a Changelog"](https://keepachangelog.com/en), except for version numbers.
 
-## [221020] - 2022-10-20
+## [1.16.0] - 2022-10-20
 
 ### Changed
 * Created a test to see if ```-AcceptLicense``` parameter is available for command ```PackageManagement\Install-Package```.
 * Converted some of the settings to input parameters (```param()```).
 
-## [220320] - 220320
+## [1.15.0] - 220320
 
 ### Added
 * Make sure not to use PowerShellGet v3 if installed.
@@ -74,7 +85,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   * See README.md for more info.
 
 
-## [211220] - 2021-12-20
+## [1.14.0] - 2021-12-20
 
 ### Added
 * Created a ```README.md```.
@@ -86,7 +97,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   * Workaround: Don't validate such version numbers at all.
   * Future: See ```README.md```.
 
-## [210914] - 2021-09-14
+## [1.13.0] - 2021-09-14
 
 ### Added
 * Added installing scripts from PowerShellGallery defined in variable $ScriptsWanted.
@@ -95,7 +106,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 * Some touchups on output to reflect that the script now does both modules and scripts.
 
-## [210819] - 2021-08-19
+## [1.12.0] - 2021-08-19
 
 ### Added
 * Started on the mission of enabling the script to install modules either in user (CurrentUser) or system (AllUsers) context.
@@ -107,16 +118,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
-## [210614] - 2021-06-14
+## [1.11.0] - 2021-06-14
 
 ### Changed
 * Added quicker check for prerequired components and modules:
   * If ```PackageManagement``` exists as module type ```Script```, not just ```Binary```, we should be good.
 
-## [210503] - 2021-05-03
+## [1.10.0] - 2021-05-03
 
 ### Added
-* Script version is now just ```YYMMdd``` for simplicity.
+* ~~Script version is now just ```YYMMdd``` for simplicity.~~
+  * Changed back to semantic versioning later.
 * On a fresh client where the module has never run before, script can now install prerequirements and continue with the script in one run by loading newest versions of the prerequirements automatically.
 * Can now update and uninstall old version of ```PowerShellGet``` in one run, by simply:
   * Update to newer version if available.
@@ -137,13 +149,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * Using markdown syntax for headers for script output. One ```#``` for H1 etc.
 * Some syntax cleanup.
 
-## [1.9.1.0] - 2020-10-03
+## [1.9.1] - 2020-10-03
 
 ### Added
 * Added check to see if powershellgallery.com is up and responding.
 * Added ability to harcode module versions to keep/ now remove.
 
-## [1.9.0.0] - 2020-05-23
+## [1.9.0] - 2020-05-23
 
 ### Added
 * Function "Uninstall-ModuleManually" to speed up uninstall of outdated modules.
@@ -152,14 +164,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 * Corrected info about some of the modules in the list of modules to install.
 
-## [1.8.0.0] - 2020-04-07
+## [1.8.0] - 2020-04-07
 
 ### Changed
 * Now using "PackageManagemeng\Install-Package" instead of "Install-Module", because "Install-Module" does not set error variable $? correctly if it fails.
 * Some speed ups
   * Use ".'Property'" instead of "Select-Object -ExpandProperty 'Property'
 
-## [1.7.0.0] - 2020-03-23
+## [1.7.0] - 2020-03-23
 
 ### Fixed
 * Install-MissingSubModules
@@ -171,13 +183,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * Syntax fix, quotation marks on all dot properties
 * Some speed ups using .Where.
 
-## [1.6.0.0] - 2019-11-28
+## [1.6.0] - 2019-11-28
 
 ### Added
 * Added setting for modules you don't want to get updated.
   * $ModulesDontUpdate.
 
-## [1.5.2.0] - 2019-11-27
+## [1.5.2] - 2019-11-27
 
 ### Added
 * Added stats.
@@ -185,7 +197,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 * Minor code refactoring.
 
-## [1.5.1.0] - 2019-11-14
+## [1.5.1] - 2019-11-14
 
 ### Added
 * Added "human readable" time start and time end output at the end, who reads time in the ToString('o') format anyway.
@@ -195,12 +207,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * Use `[OutputType]` in each function.
 * Better markdown syntax for changelog.
 
-## [1.5.0.0] - 2019-10-22
+## [1.5.0] - 2019-10-22
 
 ### Added
 * Greatly improved speed by writing my own function for getting all installed versions of a module.
 
-## [1.4.1.0] - 2019-08-08
+## [1.4.1] - 2019-08-08
 
 ### Added
 * Added option to automatically accept licenses when installing modules. Suddenly saw the first module requiring this: "Az.ApplicationMonitor".
@@ -208,19 +220,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 * Fixed code style places I saw it lagged behind. Esthetics.
 
-## [1.4.0.0] - 2019-06-19
+## [1.4.0] - 2019-06-19
 
 ### Changed
 * Prerequirements are now handled automatically in the script, no need to flip a boolean for that anymore.
 
-## [1.3.4.0] - 2019-06-16
+## [1.3.4] - 2019-06-16
 
 ### Added
 * Better handling of uninstalling PackageManagement if module is updated during current session.
   * If PackageManagement was updated during the same session, PowerShell must be closed and reopened before outdated version can be removed.
 * Will make sure that the user does not try to uninstall "PackageManagement" or "PowerShellGet".
 
-## [1.3.3.0] - 2019-05-24
+## [1.3.3] - 2019-05-24
 
 ### Fixed
 * Uninstall unwanted modules did not find any modules because the script scoped variable for installed modules is not just keeping the name of the modules anymore. Fixed with a Select-Object.
@@ -229,12 +241,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 * Better logic in the update installed modules function when a parent module is updated and submodules might have been updated aswell.
 
-## [1.3.2.0] - 2019-05-03
+## [1.3.2] - 2019-05-03
 
 ### Added
 * Added check for Execution Policy, will attempt to fix it if necessary by setting it to "Unrestricted" just for current process.
 
-## [1.3.1.0] - 2019-04-04
+## [1.3.1] - 2019-04-04
 
 ### Added
 * Added modules
@@ -243,7 +255,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 * Would fail on a clean install of Windows 10, fixed now
 
-## [1.3.0.0] - 2019-04-01
+## [1.3.0] - 2019-04-01
 
 ### Fixed
 * Install-MissingSubModules
@@ -253,12 +265,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * UpdateInstalledModules
   * If a submodule, punctuation in the name, will check once again what version is installed, in case parent module updated it.
 
-## [1.2.0.1] - 2019-03-31
+## [1.2.0] - 2019-03-31
 
 ### Fixed
 * Used "$InstallMissingModules" instead of "$InstallMissingSubModules" for controlling weather the script should add missing sumodules. Type'o.
 
-## [1.2.0.0] - 2019-03-24
+## [1.2.0] - 2019-03-24
 
 ### Added
 * Added three new modules
@@ -270,7 +282,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * Missed a "#" on one of the output headings
 * Install missing modules: Success status after install would not display.
 
-## [1.1.0.0] - 2019-03-16
+## [1.1.0] - 2019-03-16
 
 ### Added
 * Added changelog while I still remember the version history and changes.
@@ -280,7 +292,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   * For instance: Az currently has 81 submodules, I only had about 60 installed. Now the script will add all submodules available from PowerShellGallery not already installed on the computer.
   * Controllable by boolean $InstallMissingSubModules
 
-## [1.0.1.0] - 2019-03-13
+## [1.0.1] - 2019-03-13
 
 ### Added
 * Added ability to install prerequirements
@@ -288,5 +300,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   * PowerShellGet (PowerShell Module)
   * Controllable by boolean $InstallPrerequirements
 
-## [1.0.0.0] - 2019-03-10
+## [1.0.0] - 2019-03-10
 * Initial Release

@@ -20,7 +20,7 @@
     .NOTES
         Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
         Created:  190310
-        Modified: 240218
+        Modified: 240302
 
     .EXAMPLE
         # Run from PowerShell ISE or Visual Studio Code, user context
@@ -113,6 +113,7 @@ $ModulesWanted = [string[]]$(
     'PnP.PowerShell',                         # Microsoft. Used for managing SharePoint Online.
     'PolicyFileEditor',                       # Microsoft. Used for local group policy / gpedit.msc.
     'PoshRSJob',                              # Boe Prox. Used for parallel execution of PowerShell.
+    'powershell-yaml'                         # Cloudbase. Serialize and deserialize YAML, using YamlDotNet.
     'PSIntuneAuth',                           # Nickolaj Andersen. Get auth token to Intune.
     'PSPackageProject',                       # Microsoft. Help with building and publishing PowerShell packages.
     'PSPKI',                                  # Vadims Podans. Used for infrastructure and certificate management.
@@ -368,10 +369,10 @@ function Get-ModulesInstalled {
                     Try {
                         Microsoft.PowerShell.PSResourceGet\Get-InstalledPSResource -Path $Script:ModulesPath | `
                             Where-Object -FilterScript {
-                                $_.'Type' -eq 'Module' -and
-                                $_.'Repository' -eq 'PSGallery' -and
-                                -not ($IncludePreReleaseVersions -and $_.'IsPrerelease')
-                            } | `
+                            $_.'Type' -eq 'Module' -and
+                            $_.'Repository' -eq 'PSGallery' -and
+                            -not ($IncludePreReleaseVersions -and $_.'IsPrerelease')
+                        } | `
                             ForEach-Object -Process {Add-Member -InputObject $_ -MemberType 'AliasProperty' -Name 'Path' -Value 'InstalledLocation' -PassThru} | `
                             Group-Object -Property 'Name' | `
                             Select-Object -Property 'Name',@{'Name'='Versions';'Expression'='Group'}
@@ -589,7 +590,10 @@ function Install-ModulesMissing {
                 $PSResource = Microsoft.PowerShell.PSResourceGet\Find-PSResource -Type 'Module' -Repository 'PSGallery' -Name $ModuleName -ErrorAction 'SilentlyContinue'
                 if ($? -and -not [string]::IsNullOrEmpty($PSresource.'Name')) {
                     # Special case if Unix
-                    if ($PSVersionTable.'Platform' -eq 'Unix' -and -not $PSResource.'Tags'.Contains('PSEdition_Core')) {
+                    if (
+                        $PSVersionTable.'Platform' -eq 'Unix' -and
+                        $PSResource.'Tags'.Where({$_ -in 'Linux','Mac','MacOS','PSEdition_Core'},'First').'Count' -le 0
+                    ) {
                         Write-Information -MessageData ('{0}This module does not seem to support Unix, thus skipping it.' -f ($Indentation*2))
                         Continue
                     }
@@ -704,9 +708,9 @@ function Install-SubModulesMissing {
                 [array](
                     Microsoft.PowerShell.PSResourceGet\Find-PSResource -Type 'Module' -Repository 'PSGallery' -Name ('{0}.*' -f $Module.'Name') | `
                         Where-Object -FilterScript {
-                            $_.'Author' -eq $Module.'Author' -and
-                            $_.'Name' -notin $ModulesUnwanted
-                        } | Select-Object -Property 'Name','Version' | Sort-Object -Unique -Property 'Name'
+                        $_.'Author' -eq $Module.'Author' -and
+                        $_.'Name' -notin $ModulesUnwanted
+                    } | Select-Object -Property 'Name','Version' | Sort-Object -Unique -Property 'Name'
                 )
             )
 
@@ -716,7 +720,7 @@ function Install-SubModulesMissing {
                     '{0}Found {1} available sub module{2}.' -f (
                         $Indentation,
                         $SubModulesAvailable.'Count'.ToString(),
-                        [string]$(if($SubModulesAvailable.'Count' -ne 1){'s'})
+                        [string]$(if ($SubModulesAvailable.'Count' -ne 1){'s'})
                     )
                 )
                 Continue ForEachModule
@@ -738,7 +742,7 @@ function Install-SubModulesMissing {
                 '{0}Found {1} missing sub module{2}.' -f (
                     $Indentation,
                     $SubModulesMissing.'Count'.ToString(),
-                    [string]$(if($SubModulesMissing.'Count' -ne 1){'s'})
+                    [string]$(if ($SubModulesMissing.'Count' -ne 1){'s'})
                 )
             )
 
@@ -889,8 +893,8 @@ function Uninstall-ModuleManually {
         if (
             [bool]$(
                 Try{$null = [System.Version]$ModulePath.Split([System.IO.Path]::DirectorySeparatorChar)[-1];$?}Catch{$false}) -and
-                [System.IO.Directory]::Exists($ModulePath)
-            ) {
+            [System.IO.Directory]::Exists($ModulePath)
+        ) {
             $null = [System.IO.Directory]::Delete($ModulePath,$true)
             if ($? -and -not [System.IO.Directory]::Exists($ModulePath)) {
                 return
@@ -965,7 +969,7 @@ function Uninstall-ModulesOutdated {
                     $Indentation,
                     $Module.'Name',
                     $VersionsAll.'Count'.ToString(),
-                    [string]$(if($VersionsAll.'Count' -gt 1){'s'}),
+                    [string]$(if ($VersionsAll.'Count' -gt 1){'s'}),
                     [string]($VersionsAll -join ', ')
                 )
             )
@@ -1072,9 +1076,9 @@ function Uninstall-ModulesUnwanted {
         Write-Information -MessageData (
             'Found {0} unwanted module{1}.{2}' -f (
                 $ModulesToRemove.'Count'.ToString(),
-                $(if($ModulesToRemove.'Count' -ne 1){'s'}),
-                $(if($ModulesToRemove.'Count' -gt 0){
-                        ' Will proceed to uninstall {0}.' -f $(if($ModulesToRemove.'Count' -eq 1){'it'}else{'them'})
+                $(if ($ModulesToRemove.'Count' -ne 1){'s'}),
+                $(if ($ModulesToRemove.'Count' -gt 0){
+                        ' Will proceed to uninstall {0}.' -f $(if ($ModulesToRemove.'Count' -eq 1){'it'}else{'them'})
                     })
             )
         )
@@ -1182,7 +1186,10 @@ function Install-ScriptsMissing {
                 $PSResource = Microsoft.PowerShell.PSResourceGet\Find-PSResource -Type 'Script' -Repository 'PSGallery' -Name $Script -ErrorAction 'SilentlyContinue'
                 if ($? -and -not [string]::IsNullOrEmpty($PSResource.'Name')) {
                     # Special case if Unix
-                    if ($PSVersionTable.'Platform' -eq 'Unix' -and -not $PSResource.'Tags'.Contains('PSEdition_Core')) {
+                    if (
+                        $PSVersionTable.'Platform' -eq 'Unix' -and
+                        $PSResource.'Tags'.Where({$_ -in 'Linux','Mac','MacOS','PSEdition_Core'},'First').'Count' -le 0
+                    ) {
                         Write-Information -MessageData ('{0}This script does not seem to support Unix, thus skipping it.' -f ($Indentation*2))
                         Continue
                     }
@@ -1420,7 +1427,7 @@ function Write-Statistics {
                 '{0} {1}{2}' -f (
                     $CurrentDescription,
                     $CurrentObject.'Count',
-                    [string]$(if($CurrentObject.'Count' -ge 1){$FormatNewLineTab + [string]$($CurrentObject -join $FormatNewLineTab)})
+                    [string]$(if ($CurrentObject.'Count' -ge 1){$FormatNewLineTab + [string]$($CurrentObject -join $FormatNewLineTab)})
                 )
             )
         }
@@ -1489,14 +1496,14 @@ $null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'PSResource
                             ${env:ProgramFiles(x86)}
                         }
                     ),
-                    '{0}PowerShell' -f $(if($PSVersionTable.'PSEdition' -eq 'Desktop') {'Windows'})
+                    '{0}PowerShell' -f $(if ($PSVersionTable.'PSEdition' -eq 'Desktop') {'Windows'})
                 )
             }
         )
     )
 )
 $null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'ModulesPathRoot' -Value (
-    [string]($(if($SystemContext){$PSResourceHomeMachine}else{$PSResourceHomeUser}))
+    [string]($(if ($SystemContext){$PSResourceHomeMachine}else{$PSResourceHomeUser}))
 )
 
 ### Modules path
@@ -1525,7 +1532,7 @@ if (-not $SystemContext) {
 Write-Information -MessageData ('# Script start at {0}' -f $TimeTotalStart.ToString('yyyy-MM-dd HH:mm:ss'))
 Write-Information -MessageData (
     'Scope: "{0}" ("{1}").' -f (
-        $(if($SystemContext){'System'}else{'User'}),
+        $(if ($SystemContext){'System'}else{'User'}),
         $Script:Scope
     )
 )
@@ -1617,6 +1624,7 @@ Write-Information -MessageData ('{0}# Prerequirement module "Microsoft.PowerShel
 ## Find conflicting assemblies that are already loaded
 $PsrgConflictingAssembly = [object](
     [Threading.Thread]::GetDomain().GetAssemblies().Where{
+        -not [string]::IsNullOrEmpty($_.'Location') -and
         $_.'Location'.Contains('PSResourceGet') -and
         $_.'ManifestModule'.'Name' -eq 'Microsoft.PowerShell.PSResourceGet.dll'
     }[0]
@@ -1664,7 +1672,7 @@ else {
                     Catch {
                         '0.0'
                     }
-                } | Sort-Object -Property @{'Expression'={[System.Version]$_}} -Descending | Select-Object -First 1
+                } | Sort-Object -Property @{'Expression' ={[System.Version]$_}} -Descending | Select-Object -First 1
             }
             else {
                 '0.0'
@@ -1705,7 +1713,7 @@ else {
         # Assets
         $PsrgUri = [string] 'https://www.powershellgallery.com/api/v2/package/Microsoft.PowerShell.PSResourceGet/{0}' -f $PsrgLatestVersion
         $PsrgDownloadFilePath = [string] [System.IO.Path]::Combine(
-            $(if($PSVersionTable.'Platform' -eq 'Unix'){'/tmp'}else{$env:TEMP}),
+            $(if ($PSVersionTable.'Platform' -eq 'Unix'){'/tmp'}else{$env:TEMP}),
             'Microsoft.PowerShell.PSResourceGet.{0}.zip' -f $PsrgLatestversion.ToString()
         )
 
