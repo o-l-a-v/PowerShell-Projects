@@ -1,8 +1,15 @@
 # Changelog
 
-* Changelog format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
+## About
+
+* Changelog format follows [Keep a Changelog](https://keepachangelog.com/en)
 * Versioning adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.18.2] - 2024-03-08
+
+### Fixed
+
+* Indentation in `Write-Statistics` was not following the new way introduced in v1.18.0.
 
 ## [1.18.1] - 2024-03-02
 
