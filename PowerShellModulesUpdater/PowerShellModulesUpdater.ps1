@@ -20,7 +20,7 @@
     .NOTES
         Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
         Created:  190310
-        Modified: 240308
+        Modified: 240415
 
     .EXAMPLE
         # Run from PowerShell ISE or Visual Studio Code, user context
@@ -35,7 +35,7 @@
 
 
 
-# Input parameters
+# Input parameters and expected output
 [OutputType([System.Void])]
 Param (
     [Parameter(HelpMessage = 'System/device context, else current user only.')]
@@ -121,6 +121,7 @@ $ModulesWanted = [string[]]$(
     'PSPKI',                                  # Vadims Podans. Used for infrastructure and certificate management.
     'PSReadLine',                             # Microsoft. Used for helping when scripting PowerShell.
     'PSScriptAnalyzer',                       # Microsoft. Used to analyze PowerShell scripts to look for common mistakes + give advice.
+    'PSSemVer',                               # Marius Storhaug. Semantic Versioning in PowerShell using a class.
     'PSSendGrid',                             # Barbara Forbes. Used to send emails with Send Grid.
     'PSWindowsUpdate',                        # Michal Gajda. Used for updating Windows.
     'RunAsUser',                              # Kelvin Tegelaar. Allows running as current user while running as SYSTEM using impersonation.
@@ -168,7 +169,8 @@ $ModulesVersionsDontRemove = [ordered]@{
 $ScriptsWanted = [string[]](
     'Get-WindowsAutoPilotInfo',                # Microsoft, Michael Niehaus. Get Windows AutoPilot info.
     'Get-AutopilotDiagnostics',                # Microsoft, Michael Niehaus. Display diagnostics information.
-    'Upload-WindowsAutopilotDeviceInfo'        # Nickolaj Andersen. Upload autopilot hash straight to Intune.
+    'Upload-WindowsAutopilotDeviceInfo',       # Nickolaj Andersen. Upload autopilot hash straight to Intune.
+    'winfetch'                                 # Rashil Gandhi. Like neofetch, just for Windows and PowerShell.
 )
 
 
@@ -195,80 +197,433 @@ $null = Set-Variable -Option 'AllScope', 'ReadOnly' -Force -Name 'Indentation' -
 
 #region    Functions
 #region    PowerShell Gallery
-#region    Get-PowerShellGalleryPackageLatestVersion
-function Get-PowerShellGalleryPackageLatestVersion {
+#region    Find-PSGalleryPackageLatestVersionUsingApiInBatch
+function Find-PSGalleryPackageLatestVersionUsingApiInBatch {
     <#
         .SYNOPSIS
-            Fetches latest version number of a given pacakge (module or script) from PowerShellGallery.
+            Get PowerShell Gallery package version info for one or multiple packages using the API directly.
 
-        .PARAMETER ModuleName
-            String, name of the package (module or script) you want to check.
+        .NOTES
+            Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
+            Created:  240313
+            Modified: 240330
+
+        .EXAMPLE
+            Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds 'Az.Accounts','Az.Resources' -Verbose
+            Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds 'Az.CosmosDB' -IncludePrerelease -Verbose -As
+            Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds 'Az.*' -MinimalInfo -Verbose
+            Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds 'Az.*' -AsHashtable -Verbose
+            Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds 'Az.*' -AsHashtable -MinimalInfo -Verbose
     #>
 
-    # Input parameters
-    [CmdletBinding(SupportsPaging = $false)]
-    [OutputType([System.Version])]
-    param(
-        [Parameter(Mandatory, HelpMessage = 'Name of the PowerShellGallery package (module or script) to fetch.')]
-        [ValidateNotNullOrEmpty()]
-        [Alias('ModuleName','ScriptName')]
-        [string] $PackageName
-    )
+    # Input parameters and expected output
+    [CmdletBinding(DefaultParameterSetName='Stable')]
+    [CmdletBinding()]
+    [OutputType([hashtable],[PSCustomObject])]
+    Param(
+        [Parameter(Mandatory, ParameterSetName = 'Absolute')]
+        [Parameter(Mandatory, ParameterSetName = 'Stable')]
+        [Parameter(Mandatory)]
+        $PackageIds,
 
-    # Begin
-    Begin {
-        if (-not$(Try{$null = Get-Variable -Name 'Random' -Scope 'Script' -ErrorAction 'SilentlyContinue'; $?}Catch{$false})) {
-            $null = Set-Variable -Name 'Random' -Scope 'Script' -Option 'ReadOnly' -Force -Value (
-                [random]::new()
-            )
-        }
-    }
+        [Alias('Absolute','Prerelease')]
+        [Parameter(HelpMessage = 'Include prerelease.', ParameterSetName = 'Absolute')]
+        [switch] $IncludePrerelease,
+
+        [Parameter(HelpMessage = 'Optionally return result as hashtable.', ParameterSetName = 'Absolute')]
+        [Parameter(HelpMessage = 'Optionally return result as hashtable.', ParameterSetName = 'Stable')]
+        [switch] $AsHashtable,
+
+        [Parameter(HelpMessage = 'Strip some info to speed up interaction with PowerShell Gallery API.', ParameterSetName = 'Absolute')]
+        [Parameter(HelpMessage = 'Strip some info to speed up interaction with PowerShell Gallery API.', ParameterSetName = 'Stable')]
+        [switch] $MinimalInfo
+    )
 
     # Process
     Process {
-        # Access the main module page, and add a random number to trick proxies
-        $Url = [string]('https://www.powershellgallery.com/packages/{0}/?dummy={1}' -f ($PackageName,$Script:Random.Next(9999)))
-        Write-Debug -Message ('URL for module "{0}" = "{1}".' -f ($PackageName,$Url))
-
-
-        # Create Request Url
-        $Request = [System.Net.WebRequest]::Create($Url)
-
-
-        # Do not allow to redirect. The result is a "MovedPermanently"
-        $Request.'AllowAutoRedirect' = $false
-        $Request.'Proxy' = $null
-
-
-        # Try to get published version number
-        Try {
-            # Send the request
-            $Response = $Request.GetResponse()
-
-            # Get back the URL of the true destination page, and split off the version
-            $Version = [System.Version]$($Response.GetResponseHeader('Location').Split('/')[-1])
+        # Parse and validate input
+        ## Is of expected type - String or string array
+        if ($PackageIds -is [string] -or $PackageIds.ForEach{$_ -is [string]} -notcontains $false) {
+            Write-Verbose -Message 'Input seems legit.'
         }
-        Catch {
-            # Write warning if it failed & return blank version number.
-            Write-Warning -Message ($_.'Exception'.'Message')
-            $Version = [System.Version]('0.0.0.0')
+        else {
+            Throw [ArgumentException]::new('Input is not a string or string array.')
         }
-        Finally {
-            # Make sure to clean up connection
-            $Response.Close()
-            $Response.Dispose()
+
+        ## Cast input to string array, remove duplicates and sort alphabetically
+        $PackageIdsFiltered = [string[]]($PackageIds -as [string[]] | Where-Object -FilterScript {-not [string]::IsNullOrEmpty($_)} | Sort-Object -Unique)
+
+        ## Verify we still have any input
+        if ($PackageIdsFiltered.Where{-not[string]::IsNullOrEmpty($_)}.'Count' -le 0) {
+            Throw [ArgumentException]::new('Input seems to be empty.')
+        }
+
+        ## Verify that input is as expected
+        if ($PackageIdsFiltered.Where({$_.'Length' -gt 90 -or $_ -notmatch '^\*$|^(\*?)([a-zA-Z0-9.\-_]{1,})(\*?)$'},'First').'Count' -gt 0) {
+            Throw [ArgumentException]::new('Input contains unexpected characters or is too long (>90ch).')
+        }
+
+        ## Output warning if duplicates was found
+        if ($PackageIdsFiltered.'Count' -lt $PackageIds.'Count') {
+            Write-Warning -Message 'Input $PackageIds had duplicates / multiple items with the same value.'
         }
 
 
-        # Return Version
-        return $Version
+        # Create API filter based on parameter set name
+        $VersionFilter = [string](
+            $(
+                if ($IncludePrerelease.'IsPresent') {
+                    'IsAbsoluteLatestVersion'
+                }
+                else {
+                    'IsLatestVersion and not IsPrerelease'
+                }
+            )
+        )
+        if ($MinimalInfo.'IsPresent') {
+            $Select = [string] '&$select=Authors,Published,RequireLicenseAcceptance,Tags,Version' -f $Filter
+        }
+
+
+        # Skip batching if input is only one module
+        if ($PackageIdsFiltered.'Count' -eq 1 -and $PackageIdsFiltered.Where{$_.Contains('*')}.'Count' -le 0) {
+            Write-Verbose -Message 'Skipping batching because input is one specific package ID.'
+            $Results = [System.Xml.XmlElement[]](
+                $PackageIdsFiltered.ForEach{
+                    $Uri = [string](
+                        "https://www.powershellgallery.com/api/v2/FindPackagesById()?id='{0}'&`$filter={1}{2}&semVerLevel=1.0.0" -f (
+                            $_,
+                            $VersionFilter,
+                            $Select
+                        )
+                    )
+                    Write-Verbose -Message $Uri
+                    Invoke-RestMethod -Method 'Get' -Uri $Uri
+                }
+            )
+        }
+
+
+        # Else - Do batching, paging etc.
+        else {
+            # Assets
+            ## PowerShell version - To enable version specific features
+            $IsPowerShell72 = [bool]($PSVersionTable.'PSVersion' -ge $([System.Version]('7.2')))
+            $IsPowerShell74 = [bool]($PSVersionTable.'PSVersion' -ge $([System.Version]('7.4')))
+
+            ## PowerShell Gallery API
+            $ApiPageSize = [byte] 100
+            $Headers = [ordered]@{
+                'Accept'          = [string] 'application/atom+xml;charset=UTF-8'
+                'Accept-Encoding' = [string] 'gzip, deflate'
+            }
+            if ($IsPowerShell74) {
+                $Headers.'Accept-Encoding' = [string] '{0}, br' -f $Headers.'Accept-Encoding'
+            }
+
+            ## Batching of input
+            $ArrayLastIndex = [uint16]($PackageIdsFiltered.'Count'-1)
+            $ArrayPage = [byte] 0
+            $ArrayPageSize = [byte] 30
+
+            ## Results
+            $Results = [System.Collections.Generic.List[System.Xml.XmlElement]]::new()
+
+
+            # Find packages
+            Write-Verbose -Message ('Headers:{0}' -f (ConvertTo-Json -Depth 1 -InputObject $Headers -Compress))
+            do {
+                $ArrayCurrentLastIndex = [uint16]($([uint16[]]($ArrayLastIndex,(($ArrayPage*$ArrayPageSize)+$ArrayPageSize-1) | Sort-Object))[0])
+                $ApiPage = [byte] 0
+                do {
+                    # Create variable to splat into Invoke-RestMethod
+                    $Splat = [ordered]@{
+                        'Headers' = $Headers
+                        'Method'  = [string] 'Get'
+                        'Uri'     = [string](
+                            ('https://www.powershellgallery.com/api/v2/Packages?$filter={0} and (' -f $VersionFilter) +
+                            (
+                                $PackageIdsFiltered[($ArrayPage*$ArrayPageSize) .. $ArrayCurrentLastIndex].ForEach{
+                                    if ($_.EndsWith('*') -and $_.StartsWith('*')) {
+                                        "substringof('{0}',Id)" -f $_.Replace('*','')
+                                    }
+                                    elseif ($_.EndsWith('*')) {
+                                        "startswith(Id,'{0}')" -f $_.Replace('*','')
+                                    }
+                                    elseif ($_.StartsWith('*')) {
+                                        "endswith(Id,'{0}')" -f $_.Replace('*','')
+                                    }
+                                    else {
+                                        "Id eq '{0}'" -f $_
+                                    }
+                                } -join ' or '
+                            ) + ('){0}&semVerLevel=1.0.0$inlinecount=allpages&$skip={1}&$top={2}' -f $Select, ($ApiPage*$ApiPageSize), $ApiPageSize)
+                        )
+                    }
+                    # Use retry and WebSession if PowerShell >= 7.2
+                    if ($IsPowerShell72) {
+                        if ($ApiPage -le 0 -and $ArrayPage -le 0) {
+                            $Splat.'SessionVariable' = [string] 'WebSession'
+                        }
+                        else {
+                            $Splat.'WebSession' = $WebSession
+                        }
+                        $Splat.'HttpVersion'       = [System.Version] '2.0'
+                        $Splat.'MaximumRetryCount' = [int32] 2
+                        $Splat.'RetryIntervalSec'  = [int32] 1
+                    }
+                    # Do the request
+                    Write-Verbose -Message ('{0}:{1}' -f ($ArrayPage+1).ToString('00'), $Splat.'Uri')
+                    $Response = [System.Xml.XmlElement[]](Invoke-RestMethod @Splat)
+                    if ($Response.'Count' -gt 0) {
+                        $Results.AddRange($Response)
+                    }
+                    $ApiPage++
+                }
+                while ($Response.'Count' -gt 0 -and $Response.'Count' % $ApiPageSize -eq 0)
+                $ArrayPage++
+            }
+            while ($ArrayCurrentLastIndex -lt $ArrayLastIndex)
+        }
+
+
+        # Parse and create output
+        Write-Verbose -Message 'Parse and create output'
+        $OutputAsPSCustomObjectArray = [PSCustomObject[]](
+            $(
+                $Results.Where{
+                    -not [string]::IsNullOrEmpty($_.'Id')
+                }.ForEach{
+                    [PSCustomObject]@{
+                        'Name'                     = [string] $_.'title'.'#text'
+                        'Author'                   = [string] $_.'author'.'name'
+                        'Depencencies'             = [string[]](
+                            $(
+                                if (-not [string]::IsNullOrEmpty($_.'properties'.'Dependencies')) {
+                                    $_.'properties'.'Dependencies'.Split(
+                                        '|', [StringSplitOptions]::RemoveEmptyEntries
+                                    ).ForEach{
+                                        $_.Split(':', [StringSplitOptions]::RemoveEmptyEntries)[0]
+                                    } | Sort-Object -Unique
+                                }
+                            )
+                        )
+                        'Owners'                   = [string] $_.'properties'.'owners'
+                        'PublishedDate'            = [nullable[datetime]] $_.'properties'.'Published'.'#text'
+                        'RequireLicenseAcceptance' = [bool]($_.'properties'.'RequireLicenseAcceptance'.'#text' -eq 'true')
+                        'Tags'                     = [string[]](
+                            $(
+                                if ($_.'properties'.'Tags' -is [System.Xml.XmlLinkedNode]) {
+                                    $_.'properties'.'Tags'.'#text'
+                                }
+                                else {
+                                    $_.'properties'.'Tags'
+                                }
+                            ).Split(' ', [StringSplitOptions]::RemoveEmptyEntries) | Sort-Object -Unique)
+                        'Unlisted'                 = [bool]$(
+                            [string]::IsNullOrEmpty($_.'properties'.'Published'.'#text') -or
+                            $([datetime]($_.'properties'.'Published'.'#text')).'Year' -le 1900
+                        )
+                        'Version'                  = [System.Version] $_.'properties'.'Version'.Split('-')[0]
+                        'Prerelease'               = [string]$(if($_.'properties'.'Version'.Contains('-')){$_.'properties'.'Version'.Split('-')[-1]})
+                        'VersionAsString'          = [string] $_.'properties'.'Version'
+                    }
+                }
+            ) | Sort-Object -Property 'Name'
+        )
+
+        # Return
+        if ($AsHashtable) {
+            Write-Verbose -Message 'Return output as hashtable'
+            $OutputAsHashtable = [hashtable]@{}
+            $OutputAsPSCustomObjectArray.ForEach{
+                $OutputAsHashtable.Add($_.'Name',$_)
+            }
+            $OutputAsHashtable
+        }
+        else {
+            Write-Verbose -Message 'Return output as PSCustomObject'
+            $OutputAsPSCustomObjectArray.ForEach{
+                $_
+            }
+        }
     }
+}
+#endregion Find-PSGalleryPackageLatestVersionUsingApiInBatch
+
+#region    Save-PSResourceInParallel
+function Save-PSResourceInParallel {
+    <#
+        .SYNOPSIS
+            Speed up PSResourceGet\Save-PSResource by parallizing using PowerShell native runspace factory.
+
+        .NOTES
+            Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
+            Created:  231116
+            Modified: 240327
+
+        .EXAMPLE
+            Save-PSResourceInParallel -Type 'Module' -Name (Find-PSResource -Repository 'PSGallery' -Type 'Module' -Name 'Az').'Dependencies'.'Name'
+    #>
+
+    # Input parameters and expected output
+    [CmdletBinding()]
+    [OutputType([Microsoft.PowerShell.PSResourceGet.UtilClasses.PSResourceInfo[]])]
+    Param(
+        [Parameter(Mandatory, HelpMessage = 'Name of the resource(s) you want saved.')]
+        [string[]] $Name,
+
+        [Parameter(HelpMessage = 'Whether to include XML.')]
+        [bool] $IncludeXml = [bool] $true,
+
+        [Parameter(Mandatory, HelpMessage = 'Where to save the resource to.')]
+        [ValidateNotNullOrEmpty()]
+        [ValidateScript({[System.IO.Directory]::Exists($_)})]
+        [string] $Path,
+
+        [Parameter(HelpMessage = 'Where to import module "Microsoft.PowerShell.PSResourceGet" from.')]
+        [ValidateNotNullOrEmpty()]
+        [string] $PSResourceGetPath = (Get-Module -Name 'Microsoft.PowerShell.PSResourceGet' | Select-Object -First 1 -ExpandProperty 'Path'),
+
+        [Parameter(HelpMessage = 'What PSResourceGet repository to use.')]
+        [ValidateNotNullOrEmpty()]
+        [string] $Repository = 'PSGallery',
+
+        [Parameter(HelpMessage = 'Whether to skip dependency check.')]
+        [bool] $SkipDependencyCheck = [bool] $true,
+
+        [Parameter(HelpMessage = 'Maximum concurrent jobs to run simultaneously.')]
+        [byte] $ThrottleLimit = 10,
+
+        [Parameter()]
+        [bool] $TrustRepository = [bool] $true
+    )
+
+
+    # Begin
+    Begin {
+        # Assets
+        $ScriptBlock = [scriptblock]{
+            [OutputType([System.Void])]
+            Param(
+                [Parameter()]
+                [bool] $IncludeXml = $true,
+
+                [Parameter(Mandatory)]
+                [ValidateNotNullOrEmpty()]
+                [string] $Name,
+
+                [Parameter(Mandatory)]
+                [ValidateNotNullOrEmpty()]
+                [string] $Path,
+
+                [Parameter(Mandatory)]
+                [ValidateNotNullOrEmpty()]
+                [string] $PSResourceGetPath,
+
+                [Parameter(Mandatory)]
+                [ValidateNotNullOrEmpty()]
+                [string] $Repository,
+
+                [Parameter()]
+                [bool] $SkipDependencyCheck = $true,
+
+                [Parameter()]
+                [bool] $TrustRepository = $true
+            )
+            $ErrorActionPreference = 'Stop'
+            $null = Import-Module -Name $PSResourceGetPath
+            Microsoft.PowerShell.PSResourceGet\Save-PSResource -Repository $Repository -TrustRepository:$TrustRepository `
+                -IncludeXml:$IncludeXml -Path $Path -SkipDependencyCheck:$SkipDependencyCheck -Name $Name
+        }
+
+        # Initilize runspace pool
+        $RunspacePool = [runspacefactory]::CreateRunspacePool(1,$ThrottleLimit)
+        $RunspacePool.Open()
+    }
+
+
+    # Process
+    Process {
+        # Start jobs in the runspace pool
+        $RunspacePoolJobs = [PSCustomObject[]](
+            $(
+                foreach ($ModuleName in $Name) {
+                    $PowerShellObject = [powershell]::Create().AddScript($ScriptBlock).AddParameters(
+                        @{
+                            'IncludeXml'          = [bool] $IncludeXml
+                            'Name'                = [string] $ModuleName
+                            'Path'                = [string] $Path
+                            'PSResourceGetPath'   = [string] $PSResourceGetPath
+                            'Repository'          = [string] $Repository
+                            'SkipDependencyCheck' = [bool] $SkipDependencyCheck
+                            'TrustRepository'     = [bool] $TrustRepository
+                        }
+                    )
+                    $PowerShellObject.'RunspacePool' = $RunspacePool
+                    [PSCustomObject]@{
+                        'ModuleName' = $ModuleName
+                        'Instance'   = $PowerShellObject
+                        'Result'     = $PowerShellObject.BeginInvoke()
+                    }
+                }
+            )
+        )
+
+        # Wait for jobs to finish
+        $PrettyPrint = [string]('0'*$RunspacePoolJobs.'Count'.ToString().'Length')
+        $WaitIterations = [uint16]::MinValue
+        while ($RunspacePoolJobs.Where{-not $_.'Result'.'IsCompleted'}.'Count' -gt 0) {
+            if ($WaitIterations % 5 -eq 0) {
+                $Message = [string](
+                    '{0} / {1} jobs finished, {2} / {0} was successfull.' -f (
+                        $RunspacePoolJobs.Where{$_.'Result'.'IsCompleted'}.'Count'.ToString($PrettyPrint),
+                        $RunspacePoolJobs.'Count'.ToString(),
+                        $RunspacePoolJobs.Where{$_.'Result'.'IsCompleted' -and -not $_.'Instance'.'HadErrors'}.'Count'.ToString($PrettyPrint)
+                    )
+                )
+            }
+            if ($PSBoundParameters.'Keys'.Contains('Verbose') -and $WaitIterations % 5 -eq 0) {
+                Write-Verbose -Message $Message
+            }
+            elseif ($WaitIterations % 10 -eq 0) {
+                Write-Information -MessageData $Message
+            }
+            $WaitIterations++
+            Start-Sleep -Milliseconds 100
+        }
+
+        # Get success state of jobs
+        Write-Verbose -Message (
+            $RunspacePoolJobs.ForEach{
+                [PSCustomObject]@{
+                    'Name'        = [string] $_.'ModuleName'
+                    'IsCompleted' = [bool] $_.'Result'.'IsCompleted'
+                    'HadErrors'   = [bool] $_.'Instance'.'HadErrors'
+                }
+            } | Sort-Object -Property 'Name' | Format-Table | Out-String
+        )
+
+        # Collect results
+        $Results = [Microsoft.PowerShell.PSResourceGet.UtilClasses.PSResourceInfo[]](
+            $RunspacePoolJobs.ForEach{
+                $_.'Instance'.EndInvoke($_.'Result')
+            }
+        )
+    }
+
 
     # End
     End {
+        # Terminate runspace pool
+        $RunspacePool.Close()
+        $RunspacePool.Dispose()
+
+        # Output results
+        $Results
     }
 }
-#endregion Get-PowerShellGalleryPackageLatestVersion
+#endregion Save-PSResourceInParallel
 #endregion PowerShell Gallery
 
 
@@ -337,9 +692,12 @@ function Get-ModulesInstalled {
 
         .NOTES
             * Includes some workarounds to handle versions that can't be parsed as [System.Version], like beta/ pre-release.
+
+        .EXAMPLE
+            Get-ModulesInstalled -ForceRefresh
     #>
 
-    # Input parameters
+    # Input parameters and expected output
     [CmdletBinding(SupportsPaging = $false)]
     [OutputType([System.Void])]
     Param(
@@ -421,7 +779,7 @@ function Update-ModulesInstalled {
             Fetches latest version number of a given module from PowerShellGallery.
     #>
 
-    # Input parameters
+    # Input parameters and expected output
     [CmdletBinding(SupportsPaging = $false)]
     [OutputType([System.Void])]
     Param()
@@ -433,7 +791,7 @@ function Update-ModulesInstalled {
     # Process
     Process {
         # Refresh Installed Modules variable
-        $null = Get-ModulesInstalled -ForceRefresh
+        $null = Get-ModulesInstalled
 
         # Skip if no installed modules was found
         if ($Script:ModulesInstalled.'Count' -le 0) {
@@ -441,103 +799,68 @@ function Update-ModulesInstalled {
             return
         }
 
-        # Help Variables
-        $C = [uint16] 1
-        $CTotal = [string] $Script:ModulesInstalled.'Count'
-        $Digits = [string] '0' * $CTotal.'Length'
-        $ModulesInstalledNames = [string[]]($Script:ModulesInstalled.'Name' | Sort-Object)
+        # Assets
+        Write-Information -MessageData ('Get newest available version for all installed module(s).' -f $Script:ModulesInstalled.'Count'.ToString())
+        $ModulesInstalledNewestVersion = Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds $Script:ModulesInstalled.'Name'.Where{$_ -notin $ModulesDontUpdate} -AsHashtable -MinimalInfo
+        $ModulesInstalledWithNewerVersionAvailable = [PSCustomObject[]](
+            $Script:ModulesInstalled.Where{
+                $([System.Version]$_.'Version') -lt $([System.Version]$ModulesInstalledNewestVersion.$($_.'Name').'Version')
+            }.ForEach{
+                $null = Add-Member -InputObject $_ -MemberType 'NoteProperty' -Force -Name 'VersionAvailable' -Value (
+                    $ModulesInstalledNewestVersion.$($_.'Name').'Version' -as [System.Version]
+                )
+                $_
+            } | Sort-Object -Property 'Name'
+        )
+        Write-Information -MessageData ('{0} module(s) has a newer version available.' -f $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString())
+        $ModulesInstalledNotFoundInPSGallery = [PSCustomObject[]]($Script:ModulesInstalled.Where{$_.'Name' -notin $ModulesInstalledNewestVersion.'Keys'})
+        if ($ModulesInstalledNotFoundInPSGallery.'Count' -gt 0) {
+            Write-Warning -WarningAction 'Continue' -Message ('Following {0} installed module(s) was not found in PSGallery:' -f $ModulesInstalledNotFoundInPSGallery.'Count'.ToString())
+            Write-Warning -WarningAction 'Continue' -Message ($Indentation + ($ModulesInstalledNotFoundInPSGallery.'Name' | Sort-Object | Join-String -Separator ', '))
+        }
 
-        # Update Modules
-        :ForEachModule foreach ($ModuleName in $ModulesInstalledNames) {
-            # Get Latest Available Version
-            $VersionAvailable = [System.Version]$(Get-PowerShellGalleryPackageLatestVersion -PackageName $ModuleName)
+        # Don't continue if no modules requires update
+        if ($ModulesInstalledWithNewerVersionAvailable.'Count' -le 0) {
+            return
+        }
 
-            # Get Version Installed
-            $VersionInstalled = [System.Version]$($Script:ModulesInstalled.Where{$_.'Name' -eq $ModuleName}.'Version')
+        # Update outdated modules
+        Write-Information -MessageData ('Updating {0} outdated module(s) in parallel.' -f $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString())
+        $null = Save-PSResourceInParallel -Name $ModulesInstalledWithNewerVersionAvailable.'Name' -Path $Script:ModulesPath -Repository 'PSGallery' `
+            -TrustRepository $true -IncludeXml $true -ThrottleLimit 16 -SkipDependencyCheck $true
 
-            # Get Version Installed - Get fresh version number if newer version is available and current module is a sub module
-            if (
-                [System.Version]($VersionAvailable) -gt [System.Version]$($VersionInstalled) -and
-                $ModuleName -like '*?.?*' -and
-                [string[]]$($ModulesInstalledNames) -contains [string]$($ModuleName.Replace(('.{0}' -f ($ModuleName.Split('.')[-1])),''))
-            ) {
-                $VersionInstalled = [System.Version](Get-ModuleInstalledVersions -ModuleName $ModuleName | Sort-Object -Descending | Select-Object -First 1)
-            }
-
-            # Present Current Module
-            Write-Information -MessageData (
-                '{0}/{1} {2} v{3}' -f (
-                    ($C++).ToString($Digits),
-                    $CTotal,
-                    $ModuleName,
-                    $VersionInstalled.ToString()
+        # Check success
+        $ModulesInstalledWithNewerVersionAvailable.ForEach{
+            $null = Add-Member -InputObject $_ -MemberType 'NoteProperty' -Force -Name 'Success' -Value (
+                [System.IO.Directory]::Exists(
+                    [System.IO.Path]::Combine($Script:ModulesPath, $_.'Name', $_.'Version'.ToString())
                 )
             )
+        }
+        $Success = [bool]($ModulesInstalledWithNewerVersionAvailable.Where{-not $_.'Success'}.'Count' -le 0)
+        Write-Information -MessageData (
+            'Success? {0}. {1} of {2} installed successfully.' -f (
+                $Success.ToString(),
+                $ModulesInstalledWithNewerVersionAvailable.Where{$_.'Success'}.'Count'.ToString(),
+                $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString()
+            )
+        )
 
-            # Compare Version Installed vs Version Available
-            if ([System.Version]$($VersionInstalled) -ge [System.Version]$($VersionAvailable)) {
-                Write-Information -MessageData ('{0}Current version is latest version.' -f $Indentation)
-                Continue ForEachModule
-            }
-            else {
-                Write-Information -MessageData ('{0}Newer version available, v{1}.' -f $Indentation, $VersionAvailable.ToString())
-                if ([bool]$($null = Microsoft.PowerShell.PSResourceGet\Find-PSResource -Type 'Module' -Repository 'PSGallery' -Name $ModuleName -ErrorAction 'SilentlyContinue';$?)) {
-                    if ($ModulesDontUpdate -contains $ModuleName) {
-                        Write-Information -MessageData ('{0}Will not update as module is specified in script settings. ($ModulesDontUpdate).' -f ($Indentation*2), $Success.ToString)
-                    }
-                    else {
-                        # Install module
-                        $Success = [bool]$(
-                            Try {
-                                $null = Microsoft.PowerShell.PSResourceGet\Save-PSResource -Repository 'PSGallery' -TrustRepository -IncludeXml `
-                                    -Path $Script:ModulesPath -Name $ModuleName -SkipDependencyCheck -Confirm:$false -Verbose:$false 2>$null
-                                $?
-                            }
-                            Catch {
-                                $false
-                            }
-                        )
+        # Output modules not installed
+        if (-not $Success) {
+            $FailedToInstall = [PSCustomObject[]](
+                $ModulesInstalledWithNewerVersionAvailable.Where{-not $_.'Success'}
+            )
+            Write-Warning -Message ('Following {0} submodule(s) failed to install' -f $FailedToInstall.'Count'.ToString())
+            Write-Warning -Message ($FailedToInstall.'Name' | Sort-Object -Unique | Join-String -Separator ', ')
+        }
 
-                        # Double check for success
-                        if ($Success) {
-                            $Success = [bool](
-                                [System.IO.Directory]::Exists(
-                                    [System.IO.Path]::Combine($Script:ModulesPath, $ModuleName, $VersionAvailable.ToString())
-                                )
-                            )
-                        }
-
-                        # Output success
-                        Write-Information -MessageData ('{0}Install success? {1}' -f ($Indentation * 2), $Success.ToString())
-
-                        # Count as installed if success
-                        if ($Success) {
-                            # Stats
-                            $Script:ModulesUpdated += [string[]]$($ModuleName)
-                            # Updated cache of installed modules and version if current module has sub modules
-                            if ([uint16]$([string[]]$($ModulesInstalledNames.Where{$_ -like ('{0}.?*' -f $Module)}).'Count') -ge 1) {
-                                Get-ModulesInstalled
-                            }
-                            # Else, set flag to update cache of installed modules later
-                            else {
-                                $Script:ModulesInstalledNeedsRefresh = [bool] $true
-                            }
-                        }
-                        else {
-                            Write-Warning -Message (
-                                'Failed to install "{0}". Here is the error:{1}"{2}"' -f (
-                                    $ModuleName,
-                                    [System.Environment]::NewLine,
-                                    $Error[0].ToString()
-                                )
-                            )
-                        }
-                    }
-                }
-                else {
-                    Write-Warning -Message ('Did not find "{0}" in PSGallery, probably deprecated, delisted or something similar. Will skip.' -f ($ModuleName))
-                }
-            }
+        # If at least one module was successfully installed
+        if ($ModulesInstalledWithNewerVersionAvailable.Where{$_.'Success'}.'Count' -gt 0) {
+            # Stats
+            $Script:ModulesUpdated += [string[]]$($ModulesInstalledWithNewerVersionAvailable.Where{$_.'Success'}.'Name')
+            # Make sure list of installed modules gets refreshed
+            $Script:ModulesInstalledNeedsRefresh = $true
         }
     }
 
@@ -558,7 +881,7 @@ function Install-ModulesMissing {
             A string array containing names of wanted modules.
     #>
 
-    # Input parameters
+    # Input parameters and expected output
     [CmdletBinding(SupportsPaging = $false)]
     [OutputType([System.Void])]
     Param(
@@ -574,75 +897,73 @@ function Install-ModulesMissing {
         # Refresh Installed Modules variable
         $null = Get-ModulesInstalled
 
+        # Find missing modules
+        $ModulesMissing = [string[]]($ModulesWanted.Where{$_ -notin $Script:ModulesInstalled.'Name'})
+        Write-Information -MessageData ('Found {0} missing module(s).' -f $ModulesMissing.'Count'.ToString())
+        if ($ModulesMissing.'Count' -le 0) {
+            return
+        }
 
-        # Help Variables
-        $C = [uint16](1)
-        $CTotal = [string]($ModulesWanted.'Count')
-        $Digits = [string]('0' * $CTotal.'Length')
-        $ModulesInstalledNames = [string[]]($Script:ModulesInstalled.'Name' | Sort-Object)
+        # Find info on all missing modules and dependencies
+        Write-Information -MessageData 'Find info on all missing modules and dependencies'
+        $ModulesMissing = [PSCustomObject[]](
+            Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds $ModulesMissing
+        )
+        $ModulesMissing = [PSCustomObject[]](
+            Find-PSGalleryPackageLatestVersionUsingApiInBatch -MinimalInfo -PackageIds (
+                $(
+                    [string[]](
+                        $ModulesMissing.'Name' + $(
+                            foreach ($Module in $ModulesMissing) {
+                                $Module.'Depencencies'.Where{$_.StartsWith('{0}.' -f $Module.'Name')}
+                            }
+                        )
+                    ) | Sort-Object -Unique | Where-Object -FilterScript {$_ -notin $Script:ModulesInstalled.'Name'}
+                )
+            )
+        )
+        Write-Information -MessageData (
+            'Found a total of {0} module(s) that is missing and will be installed.' -f (
+                $ModulesMissing.Where{-not $_.'Installed'}.'Count'.ToString()
+            )
+        )
 
+        # Install missing modules
+        $null = Save-PSResourceInParallel -Name $ModulesMissing.'Name' -Path $Script:ModulesPath -Repository 'PSGallery' `
+            -TrustRepository $true -IncludeXml $true -ThrottleLimit 16 -SkipDependencyCheck $true
 
-        # Loop each wanted module. If not found in installed modules: Install it
-        foreach ($ModuleName in $ModulesWanted) {
-            Write-Information -MessageData ('{0}/{1} {2}' -f (($C++).ToString($Digits),$CTotal,$ModuleName))
+        # Check success
+        $ModulesMissing.ForEach{
+            $null = Add-Member -InputObject $_ -MemberType 'NoteProperty' -Force -Name 'Success' -Value (
+                [System.IO.Directory]::Exists(
+                    [System.IO.Path]::Combine($Script:ModulesPath, $_.'Name', $_.'Version'.ToString())
+                )
+            )
+        }
+        $Success = [bool]($ModulesMissing.Where{-not $_.'Success'}.'Count' -le 0)
+        Write-Information -MessageData (
+            'Success? {0}. {1} of {2} installed successfully.' -f (
+                $Success.ToString(),
+                $ModulesMissing.Where{$_.'Success'}.'Count'.ToString(),
+                $ModulesMissing.'Count'.ToString()
+            )
+        )
 
-            # Install if not already installed
-            if ($ModulesInstalledNames.Where{$_ -eq $ModuleName}.'Count' -ge 1) {
-                Write-Information -MessageData ('{0}Already Installed. Next!' -f $Indentation)
-            }
-            else {
-                Write-Information -MessageData ('{0}Not already installed. Installing.' -f $Indentation)
-                $PSResource = Microsoft.PowerShell.PSResourceGet\Find-PSResource -Type 'Module' -Repository 'PSGallery' -Name $ModuleName -ErrorAction 'SilentlyContinue'
-                if ($? -and -not [string]::IsNullOrEmpty($PSresource.'Name')) {
-                    # Special case if Unix
-                    if (
-                        $PSVersionTable.'Platform' -eq 'Unix' -and
-                        $PSResource.'Tags'.Where({$_ -in 'Linux','Mac','MacOS','PSEdition_Core'},'First').'Count' -le 0
-                    ) {
-                        Write-Information -MessageData ('{0}This module does not seem to support Unix, thus skipping it.' -f ($Indentation*2))
-                        Continue
-                    }
-                    # Install missing module
-                    ## Assets
-                    $ModulesToInstall = [string[]]($ModuleName)
-                    ## Find dependencies
-                    $ModulesToInstall += [string[]](
-                        $PSResource.'Dependencies'.'Name'.Where{
-                            $_.StartsWith('{0}.' -f $ModuleName)
-                        }
-                    )
-                    ## Remove empty results and sort object
-                    $ModulesToInstall = [string[]]($ModulesToInstall.Where{-not [string]::IsNullOrEmpty($_)} | Sort-Object -Unique)
-                    ## Install $ModuleName and all $Dependencies with -SkipDependencyCheck
-                    $Success = [bool]$(
-                        Try {
-                            $null = Microsoft.PowerShell.PSResourceGet\Save-PSResource -Repository 'PSGallery' -TrustRepository -IncludeXml `
-                                -Path $Script:ModulesPath -Name $ModulesToInstall -SkipDependencyCheck -Confirm:$false -Verbose:$false 2>$null
-                            $?
-                        }
-                        Catch {
-                            $false
-                        }
-                    )
+        # Output modules not installed
+        if (-not $Success) {
+            $FailedToInstall = [PSCustomObject[]](
+                $ModulesMissing.Where{-not $_.'Success'}
+            )
+            Write-Warning -Message ('Following {0} submodule(s) failed to install' -f $FailedToInstall.'Count'.ToString())
+            Write-Warning -Message ($FailedToInstall.'Name' | Sort-Object -Unique | Join-String -Separator ', ')
+        }
 
-                    # Output success
-                    Write-Information -MessageData ('{0}Install success? {1}' -f ($Indentation * 2),$Success.ToString())
-
-                    # Count if success
-                    if ($Success) {
-                        # Stats
-                        $Script:ModulesInstalledMissing += [string[]]$($ModuleName)
-                        # Make sure list of installed modules gets refreshed
-                        $Script:ModulesInstalledNeedsRefresh = $true
-                    }
-                    else {
-                        Write-Warning -Message ('Failed to install "{0}". Here is the error:{1}"{2}"' -f ($ModuleName,[System.Environment]::NewLine,$Error[0].ToString()))
-                    }
-                }
-                else {
-                    Write-Warning -Message ('Did not find "{0}" in PSGallery, probably deprecated, delisted or something similar. Will skip.' -f ($ModuleName))
-                }
-            }
+        # If at least one module was successfully installed
+        if ($ModulesMissing.Where{$_.'Success'}.'Count' -gt 0) {
+            # Stats
+            $Script:ModulesInstalledMissing += [string[]]$($ModulesMissing.Where{$_.'Success'}.'Name')
+            # Make sure list of installed modules gets refreshed
+            $Script:ModulesInstalledNeedsRefresh = $true
         }
     }
 
@@ -659,7 +980,8 @@ function Install-SubModulesMissing {
         .SYNOPSIS
             Installs eventually missing submodules
     #>
-    # Input parameters
+
+    # Input parameters and expected output
     [CmdletBinding(SupportsPaging = $false)]
     [OutputType([System.Void])]
     Param()
@@ -678,7 +1000,8 @@ function Install-SubModulesMissing {
             return
         }
 
-        # Help Variables - Both Foreach
+        # Find parent modules
+        Write-Information -MessageData 'Find parent modules.'
         $ParentModulesInstalled = [array](
             $ModulesInstalled.Where{
                 [bool]($_.'Name' -in $ModulesWanted) -or
@@ -690,122 +1013,90 @@ function Install-SubModulesMissing {
                 )
             } | Select-Object -Property 'Name','Author' | Sort-Object -Property 'Name' -Unique
         )
-
-        # Help Variables - Outer Foreach
-        $OC = [uint16] 1
-        $OCTotal = [string] $ParentModulesInstalled.'Count'.ToString()
-        $ODigits = [string]('0' * $OCTotal.'Length')
-
-        # Loop Through All Installed Modules
-        :ForEachModule foreach ($Module in $ParentModulesInstalled) {
-            # Present Current Module
-            Write-Information -MessageData ('{0}/{1} {2} by "{3}"' -f ($OC++).ToString($ODigits), $OCTotal, $Module.'Name', $Module.'Author')
-
-            # Get all installed sub modules
-            $SubModulesInstalled = [string[]](
-                $ModulesInstalled.Where{
-                    $_.'Name' -like ('{0}.*' -f $Module.'Name') -and $_.'Author' -eq $Module.'Author'
-                }.'Name' | Sort-Object
-            )
-
-            # Get all available sub modules
-            $SubModulesAvailable = [PSCustomObject[]](
-                [array](
-                    Microsoft.PowerShell.PSResourceGet\Find-PSResource -Type 'Module' -Repository 'PSGallery' -Name ('{0}.*' -f $Module.'Name') | `
-                        Where-Object -FilterScript {$_.'Author' -eq $Module.'Author' -and $_.'Name' -notin $ModulesUnwanted} | `
-                        Select-Object -Property 'Name','Version' | Sort-Object -Unique -Property 'Name'
-                )
-            )
-
-            # If either $SubModulesAvailable is 0, Continue Outer Foreach
-            if ($SubModulesAvailable.'Count' -eq 0) {
-                Write-Information -MessageData (
-                    '{0}Found {1} available sub module{2}.' -f (
-                        $Indentation,
-                        $SubModulesAvailable.'Count'.ToString(),
-                        [string]$(if($SubModulesAvailable.'Count' -ne 1){'s'})
-                    )
-                )
-                Continue ForEachModule
+        $ParentModulesInstalled = [array](
+            $ParentModulesInstalled.Where{
+                -not $_.'Name'.Contains('.') -or
+                $_.'Name'.Replace(
+                    ('.{0}' -f $_.'Name'.Split('.',[System.StringSplitOptions]::RemoveEmptyEntries)[-1]),
+                    ''
+                ) -notin $ParentModulesInstalled.'Name'
             }
+        )
 
-            # Compare objects to see which are missing
-            $SubModulesMissing = [PSCustomObject[]]$(
-                if ($SubModulesInstalled.'Count' -eq 0) {
-                    $SubModulesAvailable
-                }
-                else {
-                    $SubModulesAvailable.Where{
-                        $_.'Name' -notin $SubModulesInstalled
-                    }
-                }
-            )
-            ## Output result
-            Write-Information -MessageData (
-                '{0}Found {1} missing sub module{2}.' -f (
-                    $Indentation,
-                    $SubModulesMissing.'Count'.ToString(),
-                    [string]$(if($SubModulesMissing.'Count' -ne 1){'s'})
+        # Find availble sub modules
+        Write-Information -MessageData 'Find available submodules.'
+        $AvailableSubModules = [PSCustomObject[]](Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds ($ParentModulesInstalled.'Name'.ForEach{'{0}.*' -f $_}))
+        foreach ($ParentModule in $ParentModulesInstalled) {
+            # Add available submodules
+            $null = Add-Member -InputObject $ParentModule -MemberType 'NoteProperty' -Force -Name 'AvailableSubModules' -Value (
+                [PSCustomObject[]](
+                    $AvailableSubModules.Where{
+                        $_.'Name'.StartsWith('{0}.' -f $ParentModule.'Name') -and
+                        $_.'Author' -eq $ParentModule.'Author'
+                    } | Select-Object -Property 'Name', 'Version'
                 )
             )
-
-            # Install missing sub modules
-            if ($SubModulesMissing.'Count' -gt 0) {
-                # Help Variables - Inner Foreach
-                $IC = [uint16] 1
-                $ICTotal = [string] $SubModulesMissing.'Count'.ToString()
-                $IDigits = [string]('0' * $ICTotal.'Length')
-
-                # Install Modules
-                :ForEachSubModule foreach ($SubModule in $SubModulesMissing) {
-                    # Present Current Sub Module
-                    Write-Information -MessageData (
-                        '{0}{1}/{2} {3}' -f (
-                            ($Indentation * 2),
-                            ($IC++).ToString($IDigits),
-                            $ICTotal,
-                            $SubModule.'Name'
-                        )
-                    )
-
-
-                    # Install The Missing Sub Module
-                    $Success = [bool]$(
-                        Try {
-                            $null = Microsoft.PowerShell.PSResourceGet\Save-PSResource -Repository 'PSGallery' -TrustRepository -IncludeXml `
-                                -Path $Script:ModulesPath -Name $SubModule.'Name' -SkipDependencyCheck -Confirm:$false -Verbose:$false 2>$null
-                            $?
-                        }
-                        Catch {
-                            $false
-                        }
-                    )
-
-
-                    # Double check for success
-                    if ($Success) {
-                        $Success = [bool](
-                            [System.IO.Directory]::Exists(
-                                [System.IO.Path]::Combine($Script:ModulesPath, $SubModule.'Name', $SubModule.'Version'.ToString())
-                            )
-                        )
-                    }
-
-                    # Output success
-                    Write-Information -MessageData ('{0}Install success? {1}' -f ($Indentation * 3), $Success.ToString())
-
-                    # Count as installed if success
-                    if ($Success) {
-                        # Stats
-                        $Script:ModulesSubInstalledMissing += [string[]]$($SubModule.'Name')
-                        # Make sure list of installed modules gets refreshed
-                        $Script:ModulesInstalledNeedsRefresh = $true
-                    }
-                    else {
-                        Write-Warning -Message ('Failed to install "{0}". Here is the error:{1}"{2}"' -f $SubModule.'Name', [System.Environment]::NewLine, $Error[0].ToString())
-                    }
-                }
+            # Check that all available submodules is installed
+            $ParentModule.'AvailableSubModules'.ForEach{
+                $null = Add-Member -InputObject $_ -MemberType 'NoteProperty' -Force -Name 'Installed' -Value (
+                    $_.'Name' -in $ModulesInstalled.'Name'
+                )
             }
+        }
+
+        # Parent modules with available submodules that is not installed
+        $ParentModulesInstalledWithAvailableSubmodules = [PSCustomObject[]](
+            $ParentModulesInstalled.Where{$_.'AvailableSubModules'.Where{-not $_.'Installed'}.'Count' -gt 0}
+        )
+        Write-Information -MessageData (
+            'Found {0} parent module(s) with available submodule(s) that is not already installed.' -f $ParentModulesInstalledWithAvailableSubmodules.'Count'.ToString()
+        )
+        $SubModulesMissing = [PSCustomObject[]](
+            $ParentModulesInstalledWithAvailableSubmodules.'AvailableSubModules'.Where{-not $_.'Installed'} | Sort-Object -Property 'Name' -Unique
+        )
+
+        # Don't continue if no missing submodules were found
+        if ($SubModulesMissing.'Count' -le 0) {
+            return
+        }
+
+        # Install missing submodules in parallel
+        Write-Information -MessageData ('Installing {0} missing submodule(s) in parallel.' -f $SubModulesMissing.'Count'.ToString())
+        $null = Save-PSResourceInParallel -Name $SubModulesMissing.'Name' -Path $Script:ModulesPath -Repository 'PSGallery' `
+            -TrustRepository $true -IncludeXml $true -ThrottleLimit 16 -SkipDependencyCheck $true
+
+        # Check success
+        $SubModulesMissing.ForEach{
+            $null = Add-Member -InputObject $_ -MemberType 'NoteProperty' -Force -Name 'Success' -Value (
+                [System.IO.Directory]::Exists(
+                    [System.IO.Path]::Combine($Script:ModulesPath, $_.'Name', $_.'Version'.ToString())
+                )
+            )
+        }
+        $Success = [bool]($SubModulesMissing.Where{-not $_.'Success'}.'Count' -le 0)
+        Write-Information -MessageData (
+            'Success? {0}. {1} of {2} installed successfully.' -f (
+                $Success.ToString(),
+                $SubModulesMissing.Where{$_.'Success'}.'Count'.ToString(),
+                $SubModulesMissing.'Count'.ToString()
+            )
+        )
+
+        # Output modules not installed
+        if (-not $Success) {
+            $FailedToInstall = [PSCustomObject[]](
+                $SubModulesMissing.Where{-not $_.'Success'}
+            )
+            Write-Warning -Message ('Following {0} submodule(s) failed to install' -f $FailedToInstall.'Count'.ToString())
+            Write-Warning -Message ($FailedToInstall.'Name' | Sort-Object -Unique | Join-String -Separator ', ')
+        }
+
+        # If at least one module was successfully installed
+        if ($SubModulesMissing.Where{$_.'Success'}.'Count' -gt 0) {
+            # Stats
+            $Script:ModulesSubInstalledMissing += [string[]]$($SubModulesMissing.Where{$_.'Success'}.'Name')
+            # Make sure list of installed modules gets refreshed
+            $Script:ModulesInstalledNeedsRefresh = $true
         }
     }
 
@@ -926,7 +1217,7 @@ function Uninstall-ModulesOutdated {
             * Uses workaround from function Get-ModulesInstalled to handle version numbers that can't be parsed as [System.Version].
     #>
 
-    # Input parameters
+    # Input parameters and expected output
     [CmdletBinding(SupportsPaging = $false)]
     [OutputType([System.Void])]
     Param()
@@ -1058,7 +1349,7 @@ function Uninstall-ModulesUnwanted {
     # Process
     Process {
         # Refresh Installed Modules variable
-        $null = Get-ModulesInstalled -ForceRefresh
+        $null = Get-ModulesInstalled
 
         # Skip if no installed modules was found
         if ($Script:ModulesInstalled.'Count' -le 0) {
@@ -1144,7 +1435,7 @@ function Install-ScriptsMissing {
             Installs scripts that is not already installed.'
     #>
 
-    # Input parameters
+    # Input parameters and expected output
     [OutputType([System.Void])]
     Param(
         [Parameter(Mandatory, HelpMessage = 'String array with script names from PowerShell Gallery.')]
@@ -1173,61 +1464,72 @@ function Install-ScriptsMissing {
                 }
             )
         )
+
+        # Find missing scripts
+        $MissingScripts = [string[]](
+            $Scripts.Where{$_ -notin $InstalledScripts.'Name'} | Sort-Object
+        )
     }
 
     # Process
     Process {
-        foreach ($Script in $Scripts) {
+        # Don't continue if no missing scripts were found
+        if ($MissingScripts.'Count' -le 0) {
+            Write-Information -MessageData 'Found 0 missing scripts.'
+            return
+        }
+
+        # Install missing scripts
+        foreach ($Script in $MissingScripts) {
+            # Introduce current item
             Write-Information -MessageData (
                 '{0} / {1} "{2}"' -f (
-                    (1 + $Scripts.IndexOf($Script)).ToString('0' * $Scripts.'Count'.ToString().'Length'),
-                    $Scripts.'Count'.Tostring(),
+                    (1 + $MissingScripts.IndexOf($Script)).ToString('0' * $MissingScripts.'Count'.ToString().'Length'),
+                    $MissingScripts.'Count'.Tostring(),
                     $Script
                 )
             )
-            if ($InstalledScripts.'Name' -contains $Script) {
-                Write-Information -MessageData 'Already installed.'
-            }
-            else {
-                Write-Information -MessageData 'Not already installed.'
-                $PSResource = Microsoft.PowerShell.PSResourceGet\Find-PSResource -Type 'Script' -Repository 'PSGallery' -Name $Script -ErrorAction 'SilentlyContinue'
-                if ($? -and -not [string]::IsNullOrEmpty($PSResource.'Name')) {
-                    # Special case if Unix
-                    if (
-                        $PSVersionTable.'Platform' -eq 'Unix' -and
-                        $PSResource.'Tags'.Where({$_ -in 'Linux','Mac','MacOS','PSEdition_Core'},'First').'Count' -le 0
-                    ) {
-                        Write-Information -MessageData ('{0}This script does not seem to support Unix, thus skipping it.' -f $Indentation*2)
-                        Continue
-                    }
-                    # Install script
-                    $null = Microsoft.PowerShell.PSResourceGet\Save-PSResource -Repository 'PSGallery' -TrustRepository `
-                        -IncludeXml -SkipDependencyCheck -Path $Script:ScriptsPath -Name $Script
-                    # Move XML file to "InstalledScriptInfos"
-                    $Local:Source = [string] [System.IO.Path]::Combine(
-                        $Script:ScriptsPath,
-                        '{0}_InstalledScriptInfo.xml' -f $Script
-                    )
-                    $Local:Destination = [string] [System.IO.Path]::Combine(
-                        $InstalledScriptsInfos,
-                        '{0}_InstalledScriptInfo.xml' -f $Script
-                    )
-                    if ([System.IO.File]::Exists($Local:Source)) {
-                        $null = Move-Item -Path $Local:Source -Destination $Local:Destination -Force
-                    }
-                    # Output success
-                    if ([System.IO.File]::Exists($Local:Destination)) {
-                        Write-Information -MessageData ('{0}Successfully installed.' -f $Indentation)
-                        # Add to stats
-                        $Script:ScriptsMissing += [string[]]($Script)
-                    }
-                    else {
-                        Write-Warning -Message ('{0}Failed.' -f $Indentation)
-                    }
+
+            # Find script in PowerShell Gallery
+            $PSResource = Microsoft.PowerShell.PSResourceGet\Find-PSResource -Type 'Script' -Repository 'PSGallery' -Name $Script -ErrorAction 'SilentlyContinue'
+
+            # Install it if it was found
+            if ($? -and -not [string]::IsNullOrEmpty($PSResource.'Name')) {
+                # Special case if Unix
+                if (
+                    $PSVersionTable.'Platform' -eq 'Unix' -and
+                    $PSResource.'Tags'.Where({$_ -in 'Linux','Mac','MacOS','PSEdition_Core'},'First').'Count' -le 0
+                ) {
+                    Write-Information -MessageData ('{0}This script does not seem to support Unix, thus skipping it.' -f $Indentation*2)
+                    Continue
+                }
+                # Install script
+                $null = Microsoft.PowerShell.PSResourceGet\Save-PSResource -Repository 'PSGallery' -TrustRepository `
+                    -IncludeXml -SkipDependencyCheck -Path $Script:ScriptsPath -Name $Script
+                # Move XML file to "InstalledScriptInfos"
+                $Local:Source = [string] [System.IO.Path]::Combine(
+                    $Script:ScriptsPath,
+                    '{0}_InstalledScriptInfo.xml' -f $Script
+                )
+                $Local:Destination = [string] [System.IO.Path]::Combine(
+                    $InstalledScriptsInfos,
+                    '{0}_InstalledScriptInfo.xml' -f $Script
+                )
+                if ([System.IO.File]::Exists($Local:Source)) {
+                    $null = Move-Item -Path $Local:Source -Destination $Local:Destination -Force
+                }
+                # Output success
+                if ([System.IO.File]::Exists($Local:Destination)) {
+                    Write-Information -MessageData ('{0}Successfully installed.' -f $Indentation)
+                    # Add to stats
+                    $Script:ScriptsMissing += [string[]]($Script)
                 }
                 else {
-                    Write-Warning -Message 'Not found on PowerShellGallery.'
+                    Write-Warning -Message ('{0}Failed.' -f $Indentation)
                 }
+            }
+            else {
+                Write-Warning -Message 'Not found on PowerShellGallery.'
             }
         }
     }
@@ -1246,7 +1548,7 @@ function Update-ScriptsInstalled {
             Updates installed scripts originating from PowerShell Gallery.
     #>
 
-    # Input parameters
+    # Input parameters and expected output
     [OutputType([System.Void])]
     Param()
 
@@ -1276,49 +1578,60 @@ function Update-ScriptsInstalled {
 
     # Process
     Process {
-        $InstalledScripts.ForEach{
+        # Get newest version of installed scripts
+        $InstalledScriptsAvailableVersion = [hashtable](Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds $InstalledScripts.'Name' -AsHashtable -MinimalInfo)
+        $InstalledScriptsWithNewerVersionAvailable = [PSCustomObject[]](
+            $InstalledScripts.Where{
+                $_.'Version' -lt $InstalledScriptsAvailableVersion.$($_.'Name').'Version'
+            }.ForEach{
+                $null = Add-Member -InputObject $_ -MemberType 'NoteProperty' -Force -Name 'VersionAvailable' -Value (
+                    $InstalledScriptsAvailableVersion.$($_.'Name').'Version'
+                )
+            }
+        )
+        Write-Information -MessageData ('{0} installed script(s) has a newer version available.' -f $InstalledScriptsWithNewerVersionAvailable.'Count'.ToString())
+        $InstalledScriptsNotFoundInPsGallery = [PSCustomObject[]]($InstalledScripts.Where{$_.'Name' -notin $InstalledScriptsAvailableVersion.'Keys'})
+        if ($InstalledScriptsNotFoundInPsGallery.'Count' -gt 0) {
+            Write-Warning -Message 'Following {0} installed script(s) was not found in the PowerShell Gallery:'
+            Write-Warning -Message ($Indentation + ($InstalledScriptsNotFoundInPsGallery.'Name' | Sort-Object | Join-String -Separator ', '))
+        }
+
+        # Update if any has a newer version
+        $InstalledScriptsWithNewerVersionAvailable.ForEach{
             # Output current script
             Write-Information -MessageData (
-                '{0} / {1} "{2}" v{3} by "{4}"' -f (
-                    (1 + $InstalledScripts.IndexOf($_)).ToString('0' * $InstalledScripts.'Count'.ToString().'Length'),
-                    $InstalledScripts.'Count'.Tostring(),
+                '{0} / {1} "{2}" v{3} by "{4}" to v{5}' -f (
+                    (1 + $InstalledScriptsWithNewerVersionAvailable.IndexOf($_)).ToString('0' * $InstalledScriptsWithNewerVersionAvailable.'Count'.ToString().'Length'),
+                    $InstalledScriptsWithNewerVersionAvailable.'Count'.Tostring(),
                     $_.'Name',
                     $_.'Version'.ToString(),
-                    $([string[]]($_.'Author',$_.'Entities'.Where{$_.'Role' -eq 'author'}.'Name')).Where{-not[string]::IsNullOrEmpty($_)}[0]
+                    $([string[]]($_.'Author',$_.'Entities'.Where{$_.'Role' -eq 'author'}.'Name')).Where{-not[string]::IsNullOrEmpty($_)}[0],
+                    $_.'VersionAvailable'.ToString()
                 )
             )
-            # Find package on PowerShell Gallery
-            $Package = Microsoft.PowerShell.PSResourceGet\Find-PSResource -Repository 'PSGallery' -Type 'Script' -Name $_.'Name' 2>$null
-            # Skip if can't be found on PowerShell Gallery
-            if ([string]::IsNullOrEmpty($Package.'Name')) {
-                Write-Information -MessageData 'Not from PowerShell Gallery, or at least could not be found.'
+
+            # Install script
+            $null = Microsoft.PowerShell.PSResourceGet\Save-PSResource -Repository 'PSGallery' -TrustRepository `
+                -IncludeXml -SkipDependencyCheck -Path $Script:ScriptsPath -Name $_.'Name' -Version $_.'VersionAvailable'
+
+            # Move XML file to "InstalledScriptInfos"
+            $Local:Source = [string] [System.IO.Path]::Combine(
+                $Script:ScriptsPath,
+                '{0}_InstalledScriptInfo.xml' -f $_.'Name'
+            )
+            $Local:Destination = [string] [System.IO.Path]::Combine(
+                $InstalledScriptsInfos,
+                '{0}_InstalledScriptInfo.xml' -f $_.'Name'
+            )
+            if ([System.IO.File]::Exists($Local:Source)) {
+                $null = Move-Item -Path $Local:Source -Destination $Local:Destination -Force
             }
-            else {
-                if ($Package.'Version' -gt $_.'Version') {
-                    # Install script
-                    $null = Microsoft.PowerShell.PSResourceGet\Save-PSResource -Repository 'PSGallery' -TrustRepository `
-                        -IncludeXml -SkipDependencyCheck -Path $Script:ScriptsPath -Name $_.'Name'
-                    # Move XML file to "InstalledScriptInfos"
-                    $Local:Source = [string] [System.IO.Path]::Combine(
-                        $Script:ScriptsPath,
-                        '{0}_InstalledScriptInfo.xml' -f $_.'Name'
-                    )
-                    $Local:Destination = [string] [System.IO.Path]::Combine(
-                        $InstalledScriptsInfos,
-                        '{0}_InstalledScriptInfo.xml' -f $_.'Name'
-                    )
-                    if ([System.IO.File]::Exists($Local:Source)) {
-                        $null = Move-Item -Path $Local:Source -Destination $Local:Destination -Force
-                    }
-                    # Add to stats
-                    $Script:ScriptsUpdated += [string[]]($_.'Name')
-                    # Output success
-                    Write-Information -MessageData ('{0}Successfully installed.' -f $Indentation)
-                }
-                else {
-                    Write-Information -MessageData 'No newer version available.'
-                }
-            }
+
+            # Add to stats
+            $Script:ScriptsUpdated += [string[]]($_.'Name')
+
+            # Output success
+            Write-Information -MessageData ('{0}Successfully installed.' -f $Indentation)
         }
     }
 
@@ -1346,55 +1659,92 @@ function Set-PSModulePathUserContext {
         }
 
         # Assets
-        $PSModulePathWanted = [string] '%LOCALAPPDATA%\Microsoft\PowerShell\Modules'
-        $PSModulePathWantedResolved = [string] [System.Environment]::ExpandEnvironmentVariables($PSModulePathWanted)
+        $PSResourcePathWanted = [string] '%LOCALAPPDATA%\Microsoft\PowerShell'
         $RegistryPath = [string] 'Registry::HKEY_CURRENT_USER\Environment'
-
-        # Create path if it does not exist
-        if (-not [System.IO.Directory]::Exists($PSModulePathWantedResolved)) {
-            $null = [System.IO.Directory]::CreateDirectory($PSModulePathWantedResolved)
+        $Paths = [PSCustomObject[]](
+            [PSCustomObject]@{
+                'Type'        = [string] 'Modules'
+                'EnvVariable' = [string] 'PSModulePath'
+                'Unresolved'  = [string] '{0}\Modules' -f $PSResourcePathWanted
+            },
+            [PSCustomObject]@{
+                'Type'        = [string] 'Scripts'
+                'EnvVariable' = [string] 'Path'
+                'Unresolved'  = [string] '{0}\Scripts' -f $PSResourcePathWanted
+            }
+        )
+        $Paths.ForEach{
+            $null = Add-Member -InputObject $_ -MemberType 'NoteProperty' -Force -Name 'Resolved' -Value (
+                [string](
+                    [System.Environment]::ExpandEnvironmentVariables($_.'Unresolved')
+                )
+            )
         }
 
-        # Get current value without resolving the path / expanding the environmental variable
-        $PSModulePathCurrent = [string](
-            (Get-Item -Path $RegistryPath).GetValue(
-                'PSModulePath',
-                '',
-                'DoNotExpandEnvironmentNames'
+
+        # Fix paths
+        foreach ($Path in $Paths) {
+            # Create directory if it does not exist
+            if (-not [System.IO.Directory]::Exists($Path.'Resolved')) {
+                $null = [System.IO.Directory]::CreateDirectory($Path.'Resolved')
+            }
+
+            # Get current value without resolving the path / expanding the environmental variable
+            $CurrentAsString = [string](
+                (Get-Item -Path $RegistryPath).GetValue(
+                    $Path.'EnvVariable',
+                    '',
+                    'DoNotExpandEnvironmentNames'
+                )
             )
-        )
 
-        # Make current PSModulePath to a string array for easier operations
-        $PSModulePathNewAsArray = [string[]](
-            $PSModulePathCurrent.Split(
-                [System.IO.Path]::PathSeparator
-            ).Where{
-                -not [string]::IsNullOrEmpty($_)
-            }
-        )
-
-        # Remove "MyDocuments" if present, as it will resolve to OneDrive if Known Folder Move is enabled
-        $PSModulePathNewAsArray = [string[]](
-            $PSModulePathNewAsArray.Where{
-                $_ -notlike ('{0}\*' -f [System.Environment]::GetFolderPath('MyDocuments'))
-            }
-        )
-
-        # Add $PSModulePathWanted if not already present
-        if ($PSModulePathNewAsArray -notcontains $PSModulePathWanted) {
-            $PSModulePathNewAsArray = [string[]](
-                [string[]]($PSModulePathWanted) + [string[]]($PSModulePathNewAsArray) | Where-Object -FilterScript {
+            # Make $Current string array for easier operations
+            $CurrentAsArray = [string[]](
+                $CurrentAsString.Split(
+                    [System.IO.Path]::PathSeparator
+                ).Where{
                     -not [string]::IsNullOrEmpty($_)
                 }
             )
-        }
 
-        # Convert $PSModulePathNewAsArray to string for easier comparison to existing value
-        $PSModulePathNew = [string]($PSModulePathNewAsArray -join [System.IO.Path]::PathSeparator)
+            # If Type=Modules
+            if ($Path.'Type' -eq 'Modules') {
+                # Remove "MyDocuments" if present, as it will resolve to OneDrive if Known Folder Move is enabled
+                $NewAsArray = [string[]](
+                    $CurrentAsArray.Where{
+                        $_ -notlike ('{0}\*' -f [System.Environment]::GetFolderPath('MyDocuments'))
+                    }
+                )
+            }
+            else {
+                $NewAsArray = [string[]]($CurrentAsArray.Where{-not [string]::IsNullOrEmpty($_)}.ForEach{$_})
+            }
 
-        # Set new value if it changed
-        if ($PSModulePathNew -ne $PSModulePathCurrent) {
-            $null = Set-ItemProperty -Path $RegistryPath -Name 'PSModulePath' -Value $PSModulePathNew -Force -Type ([Microsoft.Win32.RegistryValueKind]::ExpandString)
+            # Add $Path.Unresolved if not already present
+            if ($NewAsArray -notcontains $Path.'Unresolved' -and $NewAsArray -notcontains $Path.'Resolved') {
+                if ($Path.'Type' -eq 'Modules') {
+                    $NewAsArray = [string[]](
+                        [string[]]($Path.'Unresolved') + [string[]]($NewAsArray) | Where-Object -FilterScript {
+                            -not [string]::IsNullOrEmpty($_)
+                        }
+                    )
+                }
+                else {
+                    $NewAsArray = [string[]](
+                        [string[]]($NewAsArray) + [string[]]($Path.'Unresolved') | Where-Object -FilterScript {
+                            -not [string]::IsNullOrEmpty($_)
+                        }
+                    )
+                }
+            }
+
+            # Convert $PSModulePathNewAsArray to string for easier comparison to existing value
+            $NewAsString = [string](($NewAsArray -join [System.IO.Path]::PathSeparator) + [System.IO.Path]::PathSeparator)
+
+            # Set new value if it changed
+            if ($NewAsString -ne $CurrentAsString) {
+                $null = Set-ItemProperty -Path $RegistryPath -Name $Path.'EnvVariable' -Value $NewAsString -Force -Type ([Microsoft.Win32.RegistryValueKind]::ExpandString)
+            }
         }
     }
 
@@ -1411,7 +1761,7 @@ function Write-Statistics {
             Outputs statistics after script has ran.
     #>
 
-    # Input parameters
+    # Input parameters and expected output
     [CmdletBinding()]
     [OutputType([System.Void])]
     Param ()
@@ -1690,7 +2040,7 @@ else {
     $PsrgLatestVersion = [System.Version](
         (
             Invoke-RestMethod -Method 'Get' -Uri (
-                "https://www.powershellgallery.com/api/v2/Packages?`$filter=IsLatestVersion and IsPrerelease eq false and Id eq 'Microsoft.PowerShell.PSResourceGet'&semVerLevel=1.0.0"
+                "https://www.powershellgallery.com/api/v2/Packages?`$filter=IsLatestVersion and not IsPrerelease and Id eq 'Microsoft.PowerShell.PSResourceGet'&semVerLevel=1.0.0"
             )
         ).'properties'.'Version'
     )

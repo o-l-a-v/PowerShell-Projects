@@ -2,8 +2,30 @@
 
 ## About
 
-* Changelog format follows [Keep a Changelog](https://keepachangelog.com/en)
+* Changelog format follows [Keep a Changelog](https://keepachangelog.com/en).
 * Versioning adheres to [Semantic Versioning](https://semver.org/).
+
+## [1.19.0-beta2] - 2024-04-15
+
+### Added
+
+* Learned that PowerShell searches for scripts in the PATH environment variable.
+  * `Set-PSModulePathUserContext` will now also add wanted scripts path to user context PATH environment variable.
+
+## [1.19.0-beta1] - 2024-03-27
+
+### Added
+
+* Function `Find-PSGalleryPackageLatestVersionUsingApiInBatch` to find latest version of resources from PowerShell Gallery in batches of up to 30 at a time.
+  * `Microsoft.PowerShell.PSResourceGet` cmdlet `Find-PSResource` can only do one at a time, even if provided a string array of package IDs.
+* Function `Save-PSResourceInParallel` to use PowerShell runspace factory to parallelize `Save-PSResource` to install multiple PowerShell resources at a time.
+  * `Microsoft.PowerShell.PSResourceGet` cmdlet `Save-PSResource` can only do one at a time, even if provided a string array of package IDs.
+
+### Changed
+
+* Huge speedups by parallization in both querying the PowerShell Gallery, and installing packages.
+* Greatly reduced vervosity and amount of script output by only showing info about packages that will be installed instead.
+  * Previously the script iterated all packages, and outputted whether to install/update or not do anything.
 
 ## [1.18.2] - 2024-03-08
 
