@@ -678,8 +678,8 @@ function Save-PSResourceInParallel {
 
 
 #region    Modules
-#region    Get-ModuleInstalledVersions
-function Get-ModuleInstalledVersions {
+#region    Get-ModuleInstalledVersion
+function Get-ModuleInstalledVersion {
     <#
         .SYNOPSIS
             Gets all installed versions of a module.
@@ -691,12 +691,15 @@ function Get-ModuleInstalledVersions {
         .PARAMETER ModuleName
             String, name of the module you want to check.
     #>
-    [CmdletBinding(SupportsPaging = $false)]
-    [OutputType([System.Version[]])]
+    [CmdletBinding()]
+    [OutputType([System.Version],[System.Version[]])]
     Param (
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [string] $ModuleName
+        [string] $ModuleName,
+
+        [Parameter()]
+        [switch] $Latest
     )
 
     # Begin
@@ -707,8 +710,8 @@ function Get-ModuleInstalledVersions {
         # Assets
         $Path = [string] [System.IO.Path]::Combine($Script:ModulesPath,$ModuleName)
 
-        # Return installed versions of $ModuleName
-        [System.Version[]](
+        # Get installed versions of $ModuleName
+        $AllVersions = [System.Version[]](
             [System.IO.Directory]::GetDirectories($Path).Where{
                 [System.IO.File]::Exists([System.IO.Path]::Combine($_,'PSGetModuleInfo.xml'))
             }.ForEach{
@@ -721,15 +724,23 @@ function Get-ModuleInstalledVersions {
                 Catch {
                     $false
                 }
-            }
+            } | Sort-Object -Property @{'Expression' = {[System.Version]$_}} -Descending
         )
+
+        # Return
+        if ($Latest.'IsPresent' -and $AllVersions.'Count' -ge 1) {
+            $AllVersions[0]
+        }
+        else {
+            $AllVersions
+        }
     }
 
     # End
     End {
     }
 }
-#endregion Get-ModuleInstalledVersions
+#endregion Get-ModuleInstalledVersion
 
 
 
@@ -747,7 +758,7 @@ function Get-ModulesInstalled {
     #>
 
     # Input parameters and expected output
-    [CmdletBinding(SupportsPaging = $false)]
+    [CmdletBinding()]
     [OutputType([System.Void])]
     Param(
         [Parameter()]
@@ -829,7 +840,7 @@ function Update-ModulesInstalled {
     #>
 
     # Input parameters and expected output
-    [CmdletBinding(SupportsPaging = $false)]
+    [CmdletBinding(SupportsShouldProcess)]
     [OutputType([System.Void])]
     Param()
 
@@ -874,53 +885,55 @@ function Update-ModulesInstalled {
         }
 
         # Update outdated modules
-        Write-Information -MessageData ('Updating {0} outdated module(s) in parallel.' -f $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString())
-        $Splat = [ordered]@{
-            'IncludeXml'          = [bool] $true
-            'Name'                = [string[]] $ModulesInstalledWithNewerVersionAvailable.'Name'
-            'Path'                = [string] $Script:ModulesPath
-            'Repository'          = [string] 'PSGallery'
-            'SkipDependencyCheck' = [bool] $true
-            'TrustRepository'     = [bool] $true
-            'ThrottleLimit'       = [byte] 16
-        }
-        if (-not [string]::IsNullOrEmpty($Script:TemporaryPath)) {
-            $Splat.'TemporaryPath' = [string] $Script:TemporaryPath
-        }
-        $null = Save-PSResourceInParallel @Splat
+        if ($PSCmdlet.ShouldProcess(('{0} modules' -f $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString()), 'update')) {
+            Write-Information -MessageData ('Updating {0} outdated module(s) in parallel.' -f $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString())
+            $Splat = [ordered]@{
+                'IncludeXml'          = [bool] $true
+                'Name'                = [string[]] $ModulesInstalledWithNewerVersionAvailable.'Name'
+                'Path'                = [string] $Script:ModulesPath
+                'Repository'          = [string] 'PSGallery'
+                'SkipDependencyCheck' = [bool] $true
+                'TrustRepository'     = [bool] $true
+                'ThrottleLimit'       = [byte] 16
+            }
+            if (-not [string]::IsNullOrEmpty($Script:TemporaryPath)) {
+                $Splat.'TemporaryPath' = [string] $Script:TemporaryPath
+            }
+            $null = Save-PSResourceInParallel @Splat
 
-        # Check success
-        $ModulesInstalledWithNewerVersionAvailable.ForEach{
-            $null = Add-Member -InputObject $_ -MemberType 'NoteProperty' -Force -Name 'Success' -Value (
-                [System.IO.Directory]::Exists(
-                    [System.IO.Path]::Combine($Script:ModulesPath, $_.'Name', $_.'Version'.ToString())
+            # Check success
+            $ModulesInstalledWithNewerVersionAvailable.ForEach{
+                $null = Add-Member -InputObject $_ -MemberType 'NoteProperty' -Force -Name 'Success' -Value (
+                    [System.IO.Directory]::Exists(
+                        [System.IO.Path]::Combine($Script:ModulesPath, $_.'Name', $_.'Version'.ToString())
+                    )
+                )
+            }
+            $Success = [bool]($ModulesInstalledWithNewerVersionAvailable.Where{-not $_.'Success'}.'Count' -le 0)
+            Write-Information -MessageData (
+                'Success? {0}. {1} of {2} installed successfully.' -f (
+                    $Success.ToString(),
+                    $ModulesInstalledWithNewerVersionAvailable.Where{$_.'Success'}.'Count'.ToString(),
+                    $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString()
                 )
             )
-        }
-        $Success = [bool]($ModulesInstalledWithNewerVersionAvailable.Where{-not $_.'Success'}.'Count' -le 0)
-        Write-Information -MessageData (
-            'Success? {0}. {1} of {2} installed successfully.' -f (
-                $Success.ToString(),
-                $ModulesInstalledWithNewerVersionAvailable.Where{$_.'Success'}.'Count'.ToString(),
-                $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString()
-            )
-        )
 
-        # Output modules not installed
-        if (-not $Success) {
-            $FailedToInstall = [PSCustomObject[]](
-                $ModulesInstalledWithNewerVersionAvailable.Where{-not $_.'Success'}
-            )
-            Write-Warning -Message ('Following {0} submodule(s) failed to install' -f $FailedToInstall.'Count'.ToString())
-            Write-Warning -Message ($FailedToInstall.'Name' | Sort-Object -Unique | Join-String -Separator ', ')
-        }
+            # Output modules not installed
+            if (-not $Success) {
+                $FailedToInstall = [PSCustomObject[]](
+                    $ModulesInstalledWithNewerVersionAvailable.Where{-not $_.'Success'}
+                )
+                Write-Warning -Message ('Following {0} submodule(s) failed to install' -f $FailedToInstall.'Count'.ToString())
+                Write-Warning -Message ($FailedToInstall.'Name' | Sort-Object -Unique | Join-String -Separator ', ')
+            }
 
-        # If at least one module was successfully installed
-        if ($ModulesInstalledWithNewerVersionAvailable.Where{$_.'Success'}.'Count' -gt 0) {
-            # Stats
-            $Script:ModulesUpdated += [string[]]$($ModulesInstalledWithNewerVersionAvailable.Where{$_.'Success'}.'Name')
-            # Make sure list of installed modules gets refreshed
-            $Script:ModulesInstalledNeedsRefresh = $true
+            # If at least one module was successfully installed
+            if ($ModulesInstalledWithNewerVersionAvailable.Where{$_.'Success'}.'Count' -gt 0) {
+                # Stats
+                $Script:ModulesUpdated += [string[]]$($ModulesInstalledWithNewerVersionAvailable.Where{$_.'Success'}.'Name')
+                # Make sure list of installed modules gets refreshed
+                $Script:ModulesInstalledNeedsRefresh = $true
+            }
         }
     }
 
@@ -942,7 +955,7 @@ function Install-ModulesMissing {
     #>
 
     # Input parameters and expected output
-    [CmdletBinding(SupportsPaging = $false)]
+    [CmdletBinding()]
     [OutputType([System.Void])]
     Param(
         [Parameter(Mandatory)]
@@ -1068,7 +1081,7 @@ function Install-SubModulesMissing {
     #>
 
     # Input parameters and expected output
-    [CmdletBinding(SupportsPaging = $false)]
+    [CmdletBinding()]
     [OutputType([System.Void])]
     Param()
 
@@ -1315,7 +1328,7 @@ function Uninstall-ModulesOutdated {
     #>
 
     # Input parameters and expected output
-    [CmdletBinding(SupportsPaging = $false)]
+    [CmdletBinding()]
     [OutputType([System.Void])]
     Param()
 
@@ -1431,7 +1444,7 @@ function Uninstall-ModulesUnwanted {
         .PARAMETER ModulesUnwanted
             String Array containig modules you don't want to be installed on your system.
     #>
-    [CmdletBinding(SupportsPaging = $false)]
+    [CmdletBinding()]
     [OutputType([System.Void])]
     Param(
         [Parameter(Mandatory = $true)]
@@ -1646,6 +1659,7 @@ function Update-ScriptsInstalled {
     #>
 
     # Input parameters and expected output
+    [CmdletBinding(SupportsShouldProcess)]
     [OutputType([System.Void])]
     Param()
 
@@ -1694,41 +1708,43 @@ function Update-ScriptsInstalled {
         }
 
         # Update if any has a newer version
-        $InstalledScriptsWithNewerVersionAvailable.ForEach{
-            # Output current script
-            Write-Information -MessageData (
-                '{0} / {1} "{2}" v{3} by "{4}" to v{5}' -f (
-                    (1 + $InstalledScriptsWithNewerVersionAvailable.IndexOf($_)).ToString('0' * $InstalledScriptsWithNewerVersionAvailable.'Count'.ToString().'Length'),
-                    $InstalledScriptsWithNewerVersionAvailable.'Count'.Tostring(),
-                    $_.'Name',
-                    $_.'Version'.ToString(),
-                    $([string[]]($_.'Author',$_.'Entities'.Where{$_.'Role' -eq 'author'}.'Name')).Where{-not[string]::IsNullOrEmpty($_)}[0],
-                    $_.'VersionAvailable'.ToString()
+        if ($PSCmdlet.ShouldProcess(('{0} scripts' -f $InstalledScriptsWithNewerVersionAvailable.'Count'.ToString()),'update')) {
+            $InstalledScriptsWithNewerVersionAvailable.ForEach{
+                # Output current script
+                Write-Information -MessageData (
+                    '{0} / {1} "{2}" v{3} by "{4}" to v{5}' -f (
+                        (1 + $InstalledScriptsWithNewerVersionAvailable.IndexOf($_)).ToString('0' * $InstalledScriptsWithNewerVersionAvailable.'Count'.ToString().'Length'),
+                        $InstalledScriptsWithNewerVersionAvailable.'Count'.Tostring(),
+                        $_.'Name',
+                        $_.'Version'.ToString(),
+                        $([string[]]($_.'Author',$_.'Entities'.Where{$_.'Role' -eq 'author'}.'Name')).Where{-not[string]::IsNullOrEmpty($_)}[0],
+                        $_.'VersionAvailable'.ToString()
+                    )
                 )
-            )
 
-            # Install script
-            $null = Microsoft.PowerShell.PSResourceGet\Save-PSResource -Repository 'PSGallery' -TrustRepository `
-                -IncludeXml -SkipDependencyCheck -Path $Script:ScriptsPath -Name $_.'Name' -Version $_.'VersionAvailable'
+                # Install script
+                $null = Microsoft.PowerShell.PSResourceGet\Save-PSResource -Repository 'PSGallery' -TrustRepository `
+                    -IncludeXml -SkipDependencyCheck -Path $Script:ScriptsPath -Name $_.'Name' -Version $_.'VersionAvailable'
 
-            # Move XML file to "InstalledScriptInfos"
-            $Local:Source = [string] [System.IO.Path]::Combine(
-                $Script:ScriptsPath,
-                '{0}_InstalledScriptInfo.xml' -f $_.'Name'
-            )
-            $Local:Destination = [string] [System.IO.Path]::Combine(
-                $InstalledScriptsInfos,
-                '{0}_InstalledScriptInfo.xml' -f $_.'Name'
-            )
-            if ([System.IO.File]::Exists($Local:Source)) {
-                $null = Move-Item -Path $Local:Source -Destination $Local:Destination -Force
+                # Move XML file to "InstalledScriptInfos"
+                $Local:Source = [string] [System.IO.Path]::Combine(
+                    $Script:ScriptsPath,
+                    '{0}_InstalledScriptInfo.xml' -f $_.'Name'
+                )
+                $Local:Destination = [string] [System.IO.Path]::Combine(
+                    $InstalledScriptsInfos,
+                    '{0}_InstalledScriptInfo.xml' -f $_.'Name'
+                )
+                if ([System.IO.File]::Exists($Local:Source)) {
+                    $null = Move-Item -Path $Local:Source -Destination $Local:Destination -Force
+                }
+
+                # Add to stats
+                $Script:ScriptsUpdated += [string[]]($_.'Name')
+
+                # Output success
+                Write-Information -MessageData ('{0}Successfully installed.' -f $Indentation)
             }
-
-            # Add to stats
-            $Script:ScriptsUpdated += [string[]]($_.'Name')
-
-            # Output success
-            Write-Information -MessageData ('{0}Successfully installed.' -f $Indentation)
         }
     }
 
@@ -1743,6 +1759,7 @@ function Update-ScriptsInstalled {
 
 #region    User context PSModulePath
 function Set-PSModulePathUserContext {
+    [CmdletBinding(SupportsShouldProcess)]
     [OutputType([System.Void])]
     Param()
 
@@ -1839,7 +1856,7 @@ function Set-PSModulePathUserContext {
             $NewAsString = [string](($NewAsArray -join [System.IO.Path]::PathSeparator) + [System.IO.Path]::PathSeparator)
 
             # Set new value if it changed
-            if ($NewAsString -ne $CurrentAsString) {
+            if ($NewAsString -ne $CurrentAsString -and $PSCmdlet.ShouldProcess($Path.'EnvVariable','set')) {
                 $null = Set-ItemProperty -Path $RegistryPath -Name $Path.'EnvVariable' -Value $NewAsString -Force -Type ([Microsoft.Win32.RegistryValueKind]::ExpandString)
             }
         }
@@ -1851,8 +1868,8 @@ function Set-PSModulePathUserContext {
 
 
 
-#region    Write-Statistics
-function Write-Statistics {
+#region    Get-Summary
+function Get-Summary {
     <#
         .SYNOPSIS
             Outputs statistics after script has ran.
@@ -1860,7 +1877,7 @@ function Write-Statistics {
 
     # Input parameters and expected output
     [CmdletBinding()]
-    [OutputType([System.Void])]
+    [OutputType([System.String])]
     Param ()
 
     # Begin
@@ -1881,32 +1898,34 @@ function Write-Statistics {
                 -not [string]::IsNullOrEmpty($_)
             }.'Count' -le 0
         ) {
-            Write-Information -MessageData 'No changes were made.'
-            return
+            return 'No changes were made.'
         }
 
         # Output stats
-        foreach ($Variable in $Script:StatisticsVariables) {
-            $CurrentObject = [string[]]$(Get-Variable -Name $Variable.'VariableName' -Scope 'Script' -ValueOnly -ErrorAction 'SilentlyContinue' | Sort-Object -Unique)
-            if ($CurrentObject.'Count' -le 0) {
-                Continue
-            }
-            $CurrentDescription = [string]$($Variable.'Description' + ':' + [string]$(' ' * [byte]$($FormatDescriptionLength - $Variable.'Description'.'Length')))
-            Write-Information -MessageData (
-                '{0} {1}{2}' -f (
-                    $CurrentDescription,
-                    $CurrentObject.'Count',
-                    [string]$(if($CurrentObject.'Count' -ge 1){$FormatNewLineTab + [string]$($CurrentObject -join $FormatNewLineTab)})
-                )
-            )
-        }
+        return (
+            $(
+                foreach ($Variable in $Script:StatisticsVariables) {
+                    $CurrentObject = [string[]]$(Get-Variable -Name $Variable.'VariableName' -Scope 'Script' -ValueOnly -ErrorAction 'SilentlyContinue' | Sort-Object -Unique)
+                    if ($CurrentObject.'Count' -le 0) {
+                        Continue
+                    }
+                    $CurrentDescription = [string]$($Variable.'Description' + ':' + [string]$(' ' * [byte]$($FormatDescriptionLength - $Variable.'Description'.'Length')))
+                    (
+                        '{0} {1}{2}' -f
+                        $CurrentDescription,
+                        $CurrentObject.'Count',
+                        [string]$(if($CurrentObject.'Count' -ge 1){$FormatNewLineTab + [string]$($CurrentObject -join $FormatNewLineTab)})
+                    )
+                }
+            ) -join [System.Environment]::NewLine
+        )
     }
 
     # End
     End {
     }
 }
-#endregion Write-Statistics
+#endregion Get-Summary
 #endregion Functions
 
 
@@ -2052,7 +2071,7 @@ if (($ModulesWanted | Where-Object -FilterScript {$ModulesUnwanted -contains $_}
 if (
     -not $(
         if ($PSVersionTable.'PSEdition' -eq 'Core') {
-            Test-Connection -TargetName 'powershellgallery.com' -TCPPort 443 -TimeoutSeconds 2 -IPv4 -Quiet -ErrorAction 'SilentlyContinue'
+            Test-Connection -TargetName 'powershellgallery.com' -TcpPort 443 -TimeoutSeconds 2 -IPv4 -Quiet -ErrorAction 'SilentlyContinue'
         }
         else {
             Test-NetConnection -ComputerName 'powershellgallery.com' -Port 443 -InformationLevel 'Quiet' -ErrorAction 'SilentlyContinue'
@@ -2306,7 +2325,7 @@ if ($DoScripts) {
 # Write Stats
 Write-Information -MessageData ('{0}# Finished.' -f ([System.Environment]::NewLine * 2))
 Write-Information -MessageData ('## Stats')
-Write-Statistics
+Write-Information -MessageData (Get-Summary)
 Write-Information -MessageData ('{0}## Time' -f [System.Environment]::NewLine)
 Write-Information -MessageData ('Start time:    {0} ({1}).' -f $Script:TimeTotalStart.ToString('HH\:mm\:ss'), $Script:TimeTotalStart.ToString('o'))
 Write-Information -MessageData ('End time:      {0} ({1}).' -f (($Script:TimeTotalEnd = [datetime]::Now).ToString('HH\:mm\:ss'),$Script:TimeTotalEnd.ToString('o')))

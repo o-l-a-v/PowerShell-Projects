@@ -14,8 +14,9 @@
     * Doc: <https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-endpoint-antivirus-performance-mode>
     * Related PSResource issue: <https://github.com/PowerShell/PSResourceGet/issues/1662>
 
-### Changes
+### Changed
 
+* Make PSSCriptAnalyzer happy: Use `SupportsShouldProcess` in functions with a verb that indicates that something can be changed.
 * Decrease amount of output created.
   * Stats: Don't output stats if nothing was changed.
   * Install modules in parallel: Only output new message if status have changed, instead of every 500ms like previously.
