@@ -19,13 +19,13 @@
 
     .NOTES
         Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
-        Created:  190310
-        Modified: 240415
+        Created:  2019-03-10
+        Modified: 2024-07-03
 
     .EXAMPLE
         # Run from PowerShell ISE or Visual Studio Code, user context
         Set-ExecutionPolicy -Scope 'Process' -ExecutionPolicy 'Bypass' -Force
-        & $(Try{$psEditor.GetEditorContext().CurrentFile.Path}Catch{$psISE.CurrentFile.FullPath}) -SystemContext $false
+        & $(Try{$psEditor.GetEditorContext().CurrentFile.Path}Catch{$psISE.CurrentFile.FullPath}) -SystemContext $false -DevDrive 'D'
 
     .EXAMPLE
         # Run from PowerShell ISE, system context, bypass script execution policy
@@ -63,7 +63,18 @@ Param (
     [bool] $UninstallUnwantedModules = $true,
 
     [Parameter(HelpMessage = 'Whether to do PowerShell scripts.')]
-    [bool] $DoScripts = $true
+    [bool] $DoScripts = $true,
+
+    [Parameter(HelpMessage = 'Windows only! Whether to use DevDrive as temp, if yes provide label, ex "D".')]
+    [ValidateScript({
+            $PSVersionTable.'Platform' -ne 'Unix' -and
+            $_.'Length' -eq 1 -and
+            $_ -match '(?i)^[a-z]{1}$'
+            [System.IO.Directory]::Exists(($_+':\')) -and
+            (Get-Volume -DriveLetter $_).'FileSystem' -eq 'ReFS'
+        })
+    ]
+    [string] $DevDrive
 )
 
 
@@ -71,12 +82,14 @@ Param (
 #region    Settings & Variables
 # List of modules
 ## Modules you want to install and keep installed
-$ModulesWanted = [string[]]$(
+$ModulesWanted = [string[]](
     'AIPService',                             # Microsoft. Used for managing Microsoft Azure Information Protection (AIP).
     'Az',                                     # Microsoft. Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
     'AzSK',                                   # Microsoft. Azure Secure DevOps Kit. https://azsk.azurewebsites.net/00a-Setup/Readme.html
     'AzViz',                                  # Prateek Singh. Used for visualizing a Azure environment.
     'AWSPowerShell.NetCore',                  # Amazon AWS
+    'Bicep',                                  # PSBicep. Provides the same functionality as Bicep CLI, plus some additional features to simplify the Bicep authoring experience.
+    'BuildHelpers',                           # Warren Frame. Helper functions for PowerShell CI/CD scenarios.
     'ConfluencePS',                           # Atlassian, for interacting with Atlassian Confluence Rest API.
     'DefenderMAPS',                           # Alex Verboon, for testing connectivity to "MAPS connection for Microsoft Windows Defender".
     'Evergreen',                              # By Aaron Parker @ Stealth Puppy. For getting URL etc. to latest version of various applications on Windows.
@@ -111,31 +124,37 @@ $ModulesWanted = [string[]]$(
     'Office365DnsChecker',                    # Colin Cogle. Checks a domain's Office 365 DNS records for correctness.
     'Optimized.Mga',                          # Bas Wijdenes. Microsoft Graph batch operations.
     'PartnerCenter',                          # Microsoft. Used for interacting with PartnerCenter API.
+    'Pester',                                 # Pester. Ubiquitous test and mock framework for PowerShell.
     'platyPS',                                # Microsoft. Used for converting markdown to PowerShell XML external help files.
     'PnP.PowerShell',                         # Microsoft. Used for managing SharePoint Online.
     'PolicyFileEditor',                       # Microsoft. Used for local group policy / gpedit.msc.
     'PoshRSJob',                              # Boe Prox. Used for parallel execution of PowerShell.
-    'powershell-yaml'                         # Cloudbase. Serialize and deserialize YAML, using YamlDotNet.
+    'powershell-yaml',                        # Cloudbase. Serialize and deserialize YAML, using YamlDotNet.
     'PSIntuneAuth',                           # Nickolaj Andersen. Get auth token to Intune.
     'PSPackageProject',                       # Microsoft. Help with building and publishing PowerShell packages.
     'PSPKI',                                  # Vadims Podans. Used for infrastructure and certificate management.
     'PSReadLine',                             # Microsoft. Used for helping when scripting PowerShell.
+    'PSRule',                                 # Microsoft. Validate infrastructure as code (IaC) and objects using PowerShell rules.
+    'PSRule.Rules.Azure',                     # Microsoft. PSRule rules for Azure.
     'PSScriptAnalyzer',                       # Microsoft. Used to analyze PowerShell scripts to look for common mistakes + give advice.
     'PSSemVer',                               # Marius Storhaug. Semantic Versioning in PowerShell using a class.
     'PSSendGrid',                             # Barbara Forbes. Used to send emails with Send Grid.
     'PSWindowsUpdate',                        # Michal Gajda. Used for updating Windows.
     'RunAsUser',                              # Kelvin Tegelaar. Allows running as current user while running as SYSTEM using impersonation.
+    'SCEPman',                                # SCEPman. Used for managing SCEPman.
     'SetBIOS',                                # Damien Van Robaeys. Used for setting BIOS settings for Lenovo, Dell and HP.
     'SharePointPnPPowerShellOnline',          # Microsoft. Used for managing SharePoint Online.
     'SpeculationControl',                     # Microsoft, by Matt Miller. To query speculation control settings (Meltdown, Spectr).
+    'TaskJob',                                # Justin Grote. Enables you to take any .NET Task object and treat it like a PowerShell Job.
     'VSTeam',                                 # Donovan Brown. Adds functionality for working with Azure DevOps and Team Foundation Server.
-    'WindowsAutoPilotIntune'                  # Michael Niehaus @ Microsoft. Used for Intune AutoPilot stuff.
+    'WindowsAutoPilotIntune',                 # Michael Niehaus @ Microsoft. Used for Intune AutoPilot stuff.
+    'WinSCP'                                  # Thomas Malkewitz. WinSCP PowerShell Wrapper Module.
 )
 
 ## Modules you don't want - Will Remove Every Related Module, for AzureRM for instance will also search for AzureRM.*
-$ModulesUnwanted = [string[]]$(
+$ModulesUnwanted = [string[]](
     'AnyPackage',                             # AnyPackage / Thomas Nieto. Spiritual successor to OneGet / PackageManagement.
-    'AnyPackage.PSResourceGet'                # AnyPackage / Thomas Nieto. PSResourceGet for AnyPackage.
+    'AnyPackage.PSResourceGet',               # AnyPackage / Thomas Nieto. PSResourceGet for AnyPackage.
     'Az.Insights',                            # Name changed to "Az.Monitor": https://learn.microsoft.com/en-us/powershell/azure/migrate-az-1.0.0#module-name-changes
     'Az.Profile',                             # Name changed to "Az.Accounts": https://learn.microsoft.com/en-us/powershell/azure/migrate-az-1.0.0#module-name-changes
     'Az.Tags',                                # Functionality merged into "Az.Resources": https://learn.microsoft.com/en-us/powershell/azure/migrate-az-1.0.0#module-name-changes
@@ -155,12 +174,12 @@ $ModulesUnwanted = [string[]]$(
 
 ## Modules you don't want to get updated - Will not update named modules in this list
 $ModulesDontUpdate = [string[]]$(
-    ''
+    #'Az.Accounts'
 )
 
 ## Module versions you don't want removed
 $ModulesVersionsDontRemove = [ordered]@{
-    #'Az.Resources' = [System.Version[]] '2.3.0'
+    #'Az.Accounts' = [System.Version[]]('2.19.0')
 }
 
 
@@ -459,11 +478,19 @@ function Save-PSResourceInParallel {
 
         .NOTES
             Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
-            Created:  231116
-            Modified: 240327
+            Created:  2023-11-16
+            Modified: 2024-06-28
 
         .EXAMPLE
-            Save-PSResourceInParallel -Type 'Module' -Name (Find-PSResource -Repository 'PSGallery' -Type 'Module' -Name 'Az').'Dependencies'.'Name'
+            . $psEditor.GetEditorContext().CurrentFile.Path
+            # All Az modules
+            Save-PSResourceInParallel `
+                -Name (Find-PSResource -Repository 'PSGallery' -Type 'Module' -Name 'Az').'Dependencies'.'Name' `
+                -Path ([System.IO.Path]::Combine(([System.Environment]::GetFolderPath('Desktop')),'TestPS'))
+            # AWSPowerShell.NetCore
+            Save-PSResourceInParallel `
+                -Name 'AWSPowerShell.NetCore' `
+                -Path ([System.IO.Path]::Combine(([System.Environment]::GetFolderPath('Desktop')),'TestPS'))
     #>
 
     # Input parameters and expected output
@@ -478,7 +505,7 @@ function Save-PSResourceInParallel {
 
         [Parameter(Mandatory, HelpMessage = 'Where to save the resource to.')]
         [ValidateNotNullOrEmpty()]
-        [ValidateScript({[System.IO.Directory]::Exists($_)})]
+        [ValidateScript({(Test-Path -Path $_ -IsValid -PathType 'Container') -and [System.IO.Directory]::Exists($_)})]
         [string] $Path,
 
         [Parameter(HelpMessage = 'Where to import module "Microsoft.PowerShell.PSResourceGet" from.')]
@@ -491,6 +518,9 @@ function Save-PSResourceInParallel {
 
         [Parameter(HelpMessage = 'Whether to skip dependency check.')]
         [bool] $SkipDependencyCheck = [bool] $true,
+
+        [Parameter(HelpMessage = 'Override temporary path.')]
+        [string] $TemporaryPath,
 
         [Parameter(HelpMessage = 'Maximum concurrent jobs to run simultaneously.')]
         [byte] $ThrottleLimit = 10,
@@ -529,12 +559,25 @@ function Save-PSResourceInParallel {
                 [bool] $SkipDependencyCheck = $true,
 
                 [Parameter()]
+                [string] $TemporaryPath,
+
+                [Parameter()]
                 [bool] $TrustRepository = $true
             )
             $ErrorActionPreference = 'Stop'
             $null = Import-Module -Name $PSResourceGetPath
-            Microsoft.PowerShell.PSResourceGet\Save-PSResource -Repository $Repository -TrustRepository:$TrustRepository `
-                -IncludeXml:$IncludeXml -Path $Path -SkipDependencyCheck:$SkipDependencyCheck -Name $Name
+            $Splat = [ordered]@{
+                'IncludeXml'          = [bool] $IncludeXml
+                'Name'                = [string] $Name
+                'Repository'          = [string] $Repository
+                'Path'                = [string] $Path
+                'SkipDependencyCheck' = [bool] $SkipDependencyCheck
+                'TrustRepository'     = [bool] $TrustRepository
+            }
+            if ($TemporaryPath) {
+                $Splat.'TemporaryPath' = [string] $TemporaryPath
+            }
+            Microsoft.PowerShell.PSResourceGet\Save-PSResource @Splat
         }
 
         # Initilize runspace pool
@@ -549,17 +592,19 @@ function Save-PSResourceInParallel {
         $RunspacePoolJobs = [PSCustomObject[]](
             $(
                 foreach ($ModuleName in $Name) {
-                    $PowerShellObject = [powershell]::Create().AddScript($ScriptBlock).AddParameters(
-                        @{
-                            'IncludeXml'          = [bool] $IncludeXml
-                            'Name'                = [string] $ModuleName
-                            'Path'                = [string] $Path
-                            'PSResourceGetPath'   = [string] $PSResourceGetPath
-                            'Repository'          = [string] $Repository
-                            'SkipDependencyCheck' = [bool] $SkipDependencyCheck
-                            'TrustRepository'     = [bool] $TrustRepository
-                        }
-                    )
+                    $Parameters = [ordered]@{
+                        'IncludeXml'          = [bool] $IncludeXml
+                        'Name'                = [string] $ModuleName
+                        'Path'                = [string] $Path
+                        'PSResourceGetPath'   = [string] $PSResourceGetPath
+                        'Repository'          = [string] $Repository
+                        'SkipDependencyCheck' = [bool] $SkipDependencyCheck
+                        'TrustRepository'     = [bool] $TrustRepository
+                    }
+                    if ($TemporaryPath) {
+                        $Parameters.'TemporaryPath' = [string] $TemporaryPath
+                    }
+                    $PowerShellObject = [powershell]::Create().AddScript($ScriptBlock).AddParameters($Parameters)
                     $PowerShellObject.'RunspacePool' = $RunspacePool
                     [PSCustomObject]@{
                         'ModuleName' = $ModuleName
@@ -572,22 +617,26 @@ function Save-PSResourceInParallel {
 
         # Wait for jobs to finish
         $PrettyPrint = [string]('0'*$RunspacePoolJobs.'Count'.ToString().'Length')
-        $WaitIterations = [uint16]::MinValue
-        while ($RunspacePoolJobs.Where{-not $_.'Result'.'IsCompleted'}.'Count' -gt 0) {
+        $WaitIterations = $Completed = $CompletedOld = $Succeeded = [uint16]::MinValue
+        while ($RunspacePoolJobs.Where({-not $_.'Result'.'IsCompleted'},'First').'Count' -gt 0) {
             if ($WaitIterations % 5 -eq 0) {
+                $Completed = [uint16]($RunspacePoolJobs.Where{$_.'Result'.'IsCompleted'}.'Count')
+                $Succeeded = [uint16]($RunspacePoolJobs.Where{$_.'Result'.'IsCompleted' -and -not $_.'Instance'.'HadErrors'}.'Count')
+                $StatusChanged = [bool]($Completed -gt $CompletedOld)
                 $Message = [string](
                     '{0} / {1} jobs finished, {2} / {0} was successfull.' -f (
-                        $RunspacePoolJobs.Where{$_.'Result'.'IsCompleted'}.'Count'.ToString($PrettyPrint),
+                        $Completed.ToString($PrettyPrint),
                         $RunspacePoolJobs.'Count'.ToString(),
-                        $RunspacePoolJobs.Where{$_.'Result'.'IsCompleted' -and -not $_.'Instance'.'HadErrors'}.'Count'.ToString($PrettyPrint)
+                        $Succeeded.ToString($PrettyPrint)
                     )
                 )
-            }
-            if ($PSBoundParameters.'Keys'.Contains('Verbose') -and $WaitIterations % 5 -eq 0) {
-                Write-Verbose -Message $Message
-            }
-            elseif ($WaitIterations % 10 -eq 0) {
-                Write-Information -MessageData $Message
+                if ($PSBoundParameters.'Keys'.Contains('Verbose')) {
+                    Write-Verbose -Message $Message
+                }
+                elseif ($WaitIterations -le 0 -or $StatusChanged) {
+                    $CompletedOld = [uint16] $Completed
+                    Write-Information -MessageData $Message
+                }
             }
             $WaitIterations++
             Start-Sleep -Milliseconds 100
@@ -826,8 +875,19 @@ function Update-ModulesInstalled {
 
         # Update outdated modules
         Write-Information -MessageData ('Updating {0} outdated module(s) in parallel.' -f $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString())
-        $null = Save-PSResourceInParallel -Name $ModulesInstalledWithNewerVersionAvailable.'Name' -Path $Script:ModulesPath -Repository 'PSGallery' `
-            -TrustRepository $true -IncludeXml $true -ThrottleLimit 16 -SkipDependencyCheck $true
+        $Splat = [ordered]@{
+            'IncludeXml'          = [bool] $true
+            'Name'                = [string[]] $ModulesInstalledWithNewerVersionAvailable.'Name'
+            'Path'                = [string] $Script:ModulesPath
+            'Repository'          = [string] 'PSGallery'
+            'SkipDependencyCheck' = [bool] $true
+            'TrustRepository'     = [bool] $true
+            'ThrottleLimit'       = [byte] 16
+        }
+        if (-not [string]::IsNullOrEmpty($Script:TemporaryPath)) {
+            $Splat.'TemporaryPath' = [string] $Script:TemporaryPath
+        }
+        $null = Save-PSResourceInParallel @Splat
 
         # Check success
         $ModulesInstalledWithNewerVersionAvailable.ForEach{
@@ -904,17 +964,32 @@ function Install-ModulesMissing {
             return
         }
 
-        # Find info on all missing modules and dependencies
+        # Find missing modules in the PowerShell Gallery
         Write-Information -MessageData 'Find info on all missing modules and dependencies'
-        $ModulesMissing = [PSCustomObject[]](
+        $ModulesMissingPsgInfo = [PSCustomObject[]](
             Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds $ModulesMissing
         )
-        $ModulesMissing = [PSCustomObject[]](
+
+        # Failproof
+        ## None of the missing modules where found in the PowerShell Gallery = Crash
+        if ($ModulesMissingPsgInfo.'Count' -le 0) {
+            Write-Error -Message ('Did not find any of the following missing modules in PowerShell Gallery: "{0}"-' -f ($ModulesMissingNotFound -join '", "'))
+        }
+        ## Some of the missing modules where not found in the PowerShell Gallery = Warn
+        $ModulesMissingNotFound = [string[]](
+            $ModulesMissing.Where{$_ -notin $ModulesMissingPsgInfo.'Name'} | Sort-Object
+        )
+        if ($ModulesMissingNotFound.'Count' -gt 0) {
+            Write-Warning -Message ('Did not find following missing modules in PowerShell Gallery: "{0}".' -f ($ModulesMissingNotFound -join '", "'))
+        }
+
+        # Get more info on the missing modules
+        $ModulesMissingPsgInfo = [PSCustomObject[]](
             Find-PSGalleryPackageLatestVersionUsingApiInBatch -MinimalInfo -PackageIds (
                 $(
                     [string[]](
-                        $ModulesMissing.'Name' + $(
-                            foreach ($Module in $ModulesMissing) {
+                        $ModulesMissingPsgInfo.'Name' + $(
+                            foreach ($Module in $ModulesMissingPsgInfo) {
                                 $Module.'Depencencies'.Where{$_.StartsWith('{0}.' -f $Module.'Name')}
                             }
                         )
@@ -924,44 +999,55 @@ function Install-ModulesMissing {
         )
         Write-Information -MessageData (
             'Found a total of {0} module(s) that is missing and will be installed.' -f (
-                $ModulesMissing.Where{-not $_.'Installed'}.'Count'.ToString()
+                $ModulesMissingPsgInfo.Where{-not $_.'Installed'}.'Count'.ToString()
             )
         )
 
         # Install missing modules
-        $null = Save-PSResourceInParallel -Name $ModulesMissing.'Name' -Path $Script:ModulesPath -Repository 'PSGallery' `
-            -TrustRepository $true -IncludeXml $true -ThrottleLimit 16 -SkipDependencyCheck $true
+        $Splat = [ordered]@{
+            'IncludeXml'          = [bool] $true
+            'Name'                = [string[]] $ModulesMissingPsgInfo.'Name'
+            'Path'                = [string] $Script:ModulesPath
+            'Repository'          = [string] 'PSGallery'
+            'SkipDependencyCheck' = [bool] $true
+            'TrustRepository'     = [bool] $true
+            'ThrottleLimit'       = [byte] 16
+        }
+        if (-not [string]::IsNullOrEmpty($Script:TemporaryPath)) {
+            $Splat.'TemporaryPath' = [string] $Script:TemporaryPath
+        }
+        $null = Save-PSResourceInParallel @Splat
 
         # Check success
-        $ModulesMissing.ForEach{
+        $ModulesMissingPsgInfo.ForEach{
             $null = Add-Member -InputObject $_ -MemberType 'NoteProperty' -Force -Name 'Success' -Value (
                 [System.IO.Directory]::Exists(
                     [System.IO.Path]::Combine($Script:ModulesPath, $_.'Name', $_.'Version'.ToString())
                 )
             )
         }
-        $Success = [bool]($ModulesMissing.Where{-not $_.'Success'}.'Count' -le 0)
+        $Success = [bool]($ModulesMissingPsgInfo.Where{-not $_.'Success'}.'Count' -le 0)
         Write-Information -MessageData (
             'Success? {0}. {1} of {2} installed successfully.' -f (
                 $Success.ToString(),
-                $ModulesMissing.Where{$_.'Success'}.'Count'.ToString(),
-                $ModulesMissing.'Count'.ToString()
+                $ModulesMissingPsgInfo.Where{$_.'Success'}.'Count'.ToString(),
+                $ModulesMissingPsgInfo.'Count'.ToString()
             )
         )
 
         # Output modules not installed
         if (-not $Success) {
             $FailedToInstall = [PSCustomObject[]](
-                $ModulesMissing.Where{-not $_.'Success'}
+                $ModulesMissingPsgInfo.Where{-not $_.'Success'}
             )
             Write-Warning -Message ('Following {0} submodule(s) failed to install' -f $FailedToInstall.'Count'.ToString())
             Write-Warning -Message ($FailedToInstall.'Name' | Sort-Object -Unique | Join-String -Separator ', ')
         }
 
         # If at least one module was successfully installed
-        if ($ModulesMissing.Where{$_.'Success'}.'Count' -gt 0) {
+        if ($ModulesMissingPsgInfo.Where{$_.'Success'}.'Count' -gt 0) {
             # Stats
-            $Script:ModulesInstalledMissing += [string[]]$($ModulesMissing.Where{$_.'Success'}.'Name')
+            $Script:ModulesInstalledMissing += [string[]]$($ModulesMissingPsgInfo.Where{$_.'Success'}.'Name')
             # Make sure list of installed modules gets refreshed
             $Script:ModulesInstalledNeedsRefresh = $true
         }
@@ -1062,8 +1148,19 @@ function Install-SubModulesMissing {
 
         # Install missing submodules in parallel
         Write-Information -MessageData ('Installing {0} missing submodule(s) in parallel.' -f $SubModulesMissing.'Count'.ToString())
-        $null = Save-PSResourceInParallel -Name $SubModulesMissing.'Name' -Path $Script:ModulesPath -Repository 'PSGallery' `
-            -TrustRepository $true -IncludeXml $true -ThrottleLimit 16 -SkipDependencyCheck $true
+        $Splat = [ordered]@{
+            'IncludeXml'          = [bool] $true
+            'Name'                = [string[]] $SubModulesMissing.'Name'
+            'Path'                = [string] $Script:ModulesPath
+            'Repository'          = [string] 'PSGallery'
+            'SkipDependencyCheck' = [bool] $true
+            'TrustRepository'     = [bool] $true
+            'ThrottleLimit'       = [byte] 16
+        }
+        if (-not [string]::IsNullOrEmpty($Script:TemporaryPath)) {
+            $Splat.'TemporaryPath' = [string] $Script:TemporaryPath
+        }
+        $null = Save-PSResourceInParallel @Splat
 
         # Check success
         $SubModulesMissing.ForEach{
@@ -1776,9 +1873,24 @@ function Write-Statistics {
         $FormatDescriptionLength = [byte]$($Script:StatisticsVariables.ForEach{$_.'Description'.'Length'} | Sort-Object -Descending | Select-Object -First 1)
         $FormatNewLineTab = [string] '{0}{1}' -f [System.Environment]::NewLine, $Indentation
 
+        # Check if any got any objects
+        if (
+            $Script:StatisticsVariables.ForEach{
+                Get-Variable -Name $_.'VariableName' -Scope 'Script' -ValueOnly -ErrorAction 'SilentlyContinue'
+            }.Where{
+                -not [string]::IsNullOrEmpty($_)
+            }.'Count' -le 0
+        ) {
+            Write-Information -MessageData 'No changes were made.'
+            return
+        }
+
         # Output stats
         foreach ($Variable in $Script:StatisticsVariables) {
             $CurrentObject = [string[]]$(Get-Variable -Name $Variable.'VariableName' -Scope 'Script' -ValueOnly -ErrorAction 'SilentlyContinue' | Sort-Object -Unique)
+            if ($CurrentObject.'Count' -le 0) {
+                Continue
+            }
             $CurrentDescription = [string]$($Variable.'Description' + ':' + [string]$(' ' * [byte]$($FormatDescriptionLength - $Variable.'Description'.'Length')))
             Write-Information -MessageData (
                 '{0} {1}{2}' -f (
@@ -1873,10 +1985,17 @@ $null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'ScriptsPat
     [string] [System.IO.Path]::Combine($Script:ModulesPathRoot,'Scripts')
 )
 
+### Temp path if -DevDrive
+if ($DevDrive) {
+    $null = Set-Variable -Scope 'Script' -Option 'ReadOnly' -Force -Name 'TemporaryPath' -Value (
+        [string]($DevDrive + ':\Temp')
+    )
+}
+
 ### Create paths if they don't exist
 if (-not $SystemContext) {
-    $([string[]]($Script:ModulesPath,$Script:ScriptsPath)).ForEach{
-        if (-not [System.IO.Directory]::Exists($_)) {
+    $([string[]]($Script:ModulesPath,$Script:ScriptsPath,$Script:TemporaryPath)).ForEach{
+        if (-not [string]::IsNullOrEmpty($_) -and -not [System.IO.Directory]::Exists($_)) {
             $null = [System.IO.Directory]::CreateDirectory($_)
         }
     }
