@@ -1,8 +1,5 @@
 ﻿#Requires -Version 5.1
 <#
-    .NAME
-        PowerShellModulesUpdater.ps1
-
     .SYNOPSIS
         Updates, installs and removes PowerShell modules on your system based on settings in the "Settings & Variables" region.
 
@@ -20,7 +17,7 @@
     .NOTES
         Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
         Created:  2019-03-10
-        Modified: 2024-10-25
+        Modified: 2024-12-19
 
     .EXAMPLE
         # Run from PowerShell ISE or Visual Studio Code, user context
@@ -36,6 +33,7 @@
 
 
 # Input parameters and expected output
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SkipAuthenticodeCheck', Justification = 'False positive.')]
 [OutputType([System.Void])]
 Param (
     [Parameter(HelpMessage = 'System/device context, else current user only.')]
@@ -44,8 +42,9 @@ Param (
     [Parameter(HelpMessage = 'Whether to accept licenses when installing modules that requires it.')]
     [bool] $AcceptLicenses = $true,
 
+    [Alias('SkipPublisherCheck')]
     [Parameter(HelpMessage = 'Security, whether to skip checking signing of the module against alleged publisher.')]
-    [bool] $SkipPublisherCheck = $true,
+    [bool] $SkipAuthenticodeCheck = $false,
 
     [Parameter(HelpMessage = 'Whether to install missing modules, specified in variable "$ModulesWanted".')]
     [bool] $InstallMissingModules = $true,
@@ -574,6 +573,7 @@ function Save-PSResourceInParallel {
             $ErrorActionPreference = 'Stop'
             $null = Import-Module -Name $PSResourceGetPath
             $Splat = [ordered]@{
+                'AuthenticodeCheck'   = [bool] -not $SkipAuthenticodeCheck
                 'IncludeXml'          = [bool] $IncludeXml
                 'Name'                = [string] $Name
                 'Repository'          = [string] $Repository
@@ -796,20 +796,14 @@ function Get-ModulesInstalled {
 
             # Get installed modules given the scope
             $InstalledModulesGivenScope = [PSCustomObject[]](
-                $(
-                    Try {
-                        Microsoft.PowerShell.PSResourceGet\Get-InstalledPSResource -Path $Script:ModulesPath |
-                            Where-Object -FilterScript {
-                                $_.'Type' -eq 'Module' -and
-                                $_.'Repository' -eq 'PSGallery' -and
-                                -not ($IncludePreReleaseVersions -and $_.'IsPrerelease')
-                            } | ForEach-Object -Process {
-                                Add-Member -InputObject $_ -MemberType 'AliasProperty' -Name 'Path' -Value 'InstalledLocation' -PassThru
-                            } | Group-Object -Property 'Name' | Select-Object -Property 'Name',@{'Name'='Versions';'Expression'='Group'}
-                    }
-                    Catch {
-                    }
-                )
+                Microsoft.PowerShell.PSResourceGet\Get-InstalledPSResource -Path $Script:ModulesPath -ErrorAction 'Ignore' |
+                    Where-Object -FilterScript {
+                        $_.'Type' -eq 'Module' -and
+                        $_.'Repository' -eq 'PSGallery' -and
+                        -not ($IncludePreReleaseVersions -and $_.'IsPrerelease')
+                    } | ForEach-Object -Process {
+                        Add-Member -InputObject $_ -MemberType 'AliasProperty' -Name 'Path' -Value 'InstalledLocation' -PassThru
+                    } | Group-Object -Property 'Name' | Select-Object -Property 'Name',@{'Name'='Versions';'Expression'='Group'}
             )
 
             # Set variable
@@ -1272,14 +1266,12 @@ function Uninstall-ModuleManually {
 
             # Get all versions
             $Versions = [PSCustomObject[]](
-                $([array](Get-ChildItem -Path $ModulePath -Directory -Depth 0)).ForEach{
-                    Try {
-                        [PSCustomObject]@{
-                            'Path'    = [string] $_.'FullName'
-                            'Version' = [System.Version] $_.'Name'
-                        }
-                    }
-                    Catch {
+                $([array](Get-ChildItem -Path $ModulePath -Directory -Depth 0)).Where{
+                    [System.Version]::TryParse($_.'Name',[ref]$null)
+                }.ForEach{
+                    [PSCustomObject]@{
+                        'Path'    = [string] $_.'FullName'
+                        'Version' = [System.Version] $_.'Name'
                     }
                 }
             )
@@ -1575,17 +1567,21 @@ function Install-ScriptsMissing {
 
         # Get installed scripts
         $InstalledScripts = [array](
-            $(
+            [System.IO.Directory]::GetFiles(
+                [System.IO.Path]::Combine($Script:ScriptsPath,'InstalledScriptInfos'),
+                '*.xml'
+            ).ForEach{
                 Try {
-                    [System.IO.Directory]::GetFiles([System.IO.Path]::Combine($Script:ScriptsPath,'InstalledScriptInfos'),'*.xml').ForEach{
-                        [Microsoft.PowerShell.PSResourceGet.UtilClasses.TestHooks]::ReadPSGetResourceInfo(
-                            $_
-                        )
-                    }.Where{$_.'Repository' -eq 'PSGallery' -and $_.'Type' -eq 'Script'}
+                    [Microsoft.PowerShell.PSResourceGet.UtilClasses.TestHooks]::ReadPSGetResourceInfo(
+                        $_
+                    )
                 }
                 Catch {
+                    $null
                 }
-            )
+            }.Where{
+                $_.'Repository' -eq 'PSGallery' -and $_.'Type' -eq 'Script'
+            }
         )
 
         # Find missing scripts
@@ -1627,8 +1623,16 @@ function Install-ScriptsMissing {
                     Continue
                 }
                 # Install script
-                $null = Microsoft.PowerShell.PSResourceGet\Save-PSResource -Repository 'PSGallery' -TrustRepository `
-                    -IncludeXml -SkipDependencyCheck -Path $Script:ScriptsPath -Name $Script
+                $Splat = [ordered]@{
+                    'AuthenticodeCheck'   = [bool] -not $SkipAuthenticodeCheck
+                    'IncludeXml'          = [bool] $true
+                    'Name'                = [string] $Script
+                    'Path'                = [string] $Script:ScriptsPath
+                    'Repository'          = [string] 'PSGallery'
+                    'SkipDependencyCheck' = [bool] $true
+                    'TrustRepository'     = [bool] $true
+                }
+                $null = Microsoft.PowerShell.PSResourceGet\Save-PSResource @Splat
                 # Move XML file to "InstalledScriptInfos"
                 $Local:Source = [string] [System.IO.Path]::Combine(
                     $Script:ScriptsPath,
@@ -1686,17 +1690,21 @@ function Update-ScriptsInstalled {
 
         # Get installed scripts
         $InstalledScripts = [array](
-            $(
+            [System.IO.Directory]::GetFiles(
+                [System.IO.Path]::Combine($Script:ScriptsPath,'InstalledScriptInfos'),
+                '*.xml'
+            ).ForEach{
                 Try {
-                    [System.IO.Directory]::GetFiles([System.IO.Path]::Combine($Script:ScriptsPath,'InstalledScriptInfos'),'*.xml').ForEach{
-                        [Microsoft.PowerShell.PSResourceGet.UtilClasses.TestHooks]::ReadPSGetResourceInfo(
-                            $_
-                        )
-                    }.Where{$_.'Repository' -eq 'PSGallery' -and $_.'Type' -eq 'Script'}
+                    [Microsoft.PowerShell.PSResourceGet.UtilClasses.TestHooks]::ReadPSGetResourceInfo(
+                        $_
+                    )
                 }
                 Catch {
+                    $null
                 }
-            )
+            }.Where{
+                $_.'Repository' -eq 'PSGallery' -and $_.'Type' -eq 'Script'
+            }
         )
     }
 
@@ -1736,8 +1744,17 @@ function Update-ScriptsInstalled {
                 )
 
                 # Install script
-                $null = Microsoft.PowerShell.PSResourceGet\Save-PSResource -Repository 'PSGallery' -TrustRepository `
-                    -IncludeXml -SkipDependencyCheck -Path $Script:ScriptsPath -Name $_.'Name' -Version $_.'VersionAvailable'
+                $Splat = [ordered]@{
+                    'AuthenticodeCheck'   = [bool] -not $SkipAuthenticodeCheck
+                    'IncludeXml'          = [bool] $true
+                    'Name'                = [string] $_.'Name'
+                    'Path'                = [string] $Script:ScriptsPath
+                    'Repository'          = [string] 'PSGallery'
+                    'SkipDependencyCheck' = [bool] $true
+                    'TrustRepository'     = [bool] $true
+                    'Version'             = [bool] $_.'VersionAvailable'
+                }
+                $null = Microsoft.PowerShell.PSResourceGet\Save-PSResource @Splat
 
                 # Move XML file to "InstalledScriptInfos"
                 $Local:Source = [string] [System.IO.Path]::Combine(

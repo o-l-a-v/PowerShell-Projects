@@ -5,6 +5,18 @@
 * Changelog format follows [Keep a Changelog](https://keepachangelog.com/en).
 * Versioning adheres to [Semantic Versioning](https://semver.org/).
 
+## 1.20.0 - 2024-12-19
+
+### Added
+
+* Use PSResourceGet `-AuthenticodeCheck` which seems equivalent to PowerShellGet and PackageManagement `-SkipPublisherCheck`.
+
+### Changed
+
+* Made PSSCriptAnalyzer happy:
+  * Replace empty `Catch{}` blocks with something better.
+  * Suppress `PSReviewUnusedParameter` for `SkipAuthenticodeCheck` because it's a false positive.
+
 ## 1.19.2 - 2024-10-25
 
 ### Fixed
