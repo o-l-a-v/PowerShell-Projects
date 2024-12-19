@@ -6,6 +6,8 @@
 > * This script is provided as-is, you should run it with caution.
 > * If it breaks anything on your computer it's your fault.
 
+<!-- Make Markdownlint not complain about MD028 -->
+
 > [!NOTE]
 > I recommend using Scoop instead: <https://scoop.sh/#/apps?q=adb+fastboot>
 
