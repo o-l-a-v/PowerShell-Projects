@@ -1,6 +1,6 @@
 # Android Platfor Tools Updater
 
-> [!INFO]
+> [!NOTE]
 > I recommend using Scoop instead: <https://scoop.sh/#/apps?q=adb+fastboot>
 
 ## Disclaimer
