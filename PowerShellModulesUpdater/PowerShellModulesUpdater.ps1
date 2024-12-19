@@ -792,13 +792,13 @@ function Get-ModulesInstalled {
                 $(
                     Try {
                         Microsoft.PowerShell.PSResourceGet\Get-InstalledPSResource -Path $Script:ModulesPath | `
-                            Where-Object -FilterScript {
-                            $_.'Type' -eq 'Module' -and
-                            $_.'Repository' -eq 'PSGallery' -and
-                            -not ($IncludePreReleaseVersions -and $_.'IsPrerelease')
-                        } | ForEach-Object -Process {
-                            Add-Member -InputObject $_ -MemberType 'AliasProperty' -Name 'Path' -Value 'InstalledLocation' -PassThru
-                        } | Group-Object -Property 'Name' | Select-Object -Property 'Name',@{'Name'='Versions';'Expression'='Group'}
+                                Where-Object -FilterScript {
+                                $_.'Type' -eq 'Module' -and
+                                $_.'Repository' -eq 'PSGallery' -and
+                                -not ($IncludePreReleaseVersions -and $_.'IsPrerelease')
+                            } | ForEach-Object -Process {
+                                Add-Member -InputObject $_ -MemberType 'AliasProperty' -Name 'Path' -Value 'InstalledLocation' -PassThru
+                            } | Group-Object -Property 'Name' | Select-Object -Property 'Name',@{'Name'='Versions';'Expression'='Group'}
                     }
                     Catch {
                     }

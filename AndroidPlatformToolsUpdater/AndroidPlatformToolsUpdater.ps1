@@ -14,7 +14,7 @@
         User Context
             * Installs to "%localappdata%\Android Platform Tools"
             * Will make Android Platform Tools available only to the user logged in when running this script
-        
+
         System Context
             * Installs to "%ProgramFiles(x86)%\Android Platform Tools"
             * Will make Android Platform Tools available to all users on the machine
@@ -78,16 +78,16 @@ $ProgressPreference    = 'SilentlyContinue'
 
 
 
-#region    Functions   
+#region    Functions
 #region    Get-AndroidPlatformToolsInstalledVersion
 function Get-AndroidPlatformToolsInstalledVersion {
     <#
         .SYNOPSIS
             Gets Android Platform Tools version already installed in given path on the system.
     #>
-            
-            
-    # Input parameters            
+
+
+    # Input parameters
     [CmdletBinding()]
     [OutputType([System.Version])]
     Param(
@@ -102,7 +102,7 @@ function Get-AndroidPlatformToolsInstalledVersion {
             }
         )
     )
-            
+
     # Begin
     Begin {}
 
@@ -122,7 +122,7 @@ function Get-AndroidPlatformToolsInstalledVersion {
             }
         )
     }
-            
+
 
     # End
     End {
@@ -138,7 +138,7 @@ function Install-AndroidPlatformToolsLatest {
     <#
         .SYNOPSIS
             Installs Android Platform Tools Latest Version to given Path.
-                       
+
         .PARAMETER PathDirAndroidPlatformTools
             Path to where Android Platform Tools will be installed.
             Optional String [string].
@@ -154,8 +154,8 @@ function Install-AndroidPlatformToolsLatest {
             Optional variable, boolean.
             Default value: $True.
     #>
-            
-            
+
+
     # Input parameters
     [CmdletBinding()]
     [OutputType([System.Boolean])]
@@ -189,26 +189,26 @@ function Install-AndroidPlatformToolsLatest {
             )
         )
         $Success = [bool] $false
-                
+
         # Assets - Downlaod link
         $UrlFileAndroidPlatformTools          = [string] 'https://dl.google.com/android/repository/platform-tools-latest-windows.zip'
-                
+
         # Assets - Temp directory
         $PathDirTemp                          = [string] $env:TEMP
         $PathDirTempAndroidPlatformTools      = [string] '{0}\platform-tools' -f $PathDirTemp
         $PathFileTempFastboot                 = [string] '{0}\fastboot.exe' -f $PathDirTempAndroidPlatformTools
         $PathFileDownloadAndroidPlatformTools = [string] '{0}\{1}' -f $PathDirTemp,$UrlFileAndroidPlatformTools.Split('/')[-1]
     }
-    
-            
+
+
     # Process
     Process {
         # Make sure current user is admin
         if (-not($CurrentUserIsAdmin)) {
             Throw ('ERROR: This function must be run as administrator.')
         }
-        
-        
+
+
         # Remove existing files
         $([string[]]($PathDirTempAndroidPlatformTools,$PathFileDownloadAndroidPlatformTools)).ForEach{
             if (Test-Path -Path $_) {
@@ -217,18 +217,18 @@ function Install-AndroidPlatformToolsLatest {
         }
 
 
-        # Download                
+        # Download
         Write-Information -MessageData ('Downloading Android Platform Tools from "{0}".' -f $UrlFileAndroidPlatformTools)
         $Success = [bool]$(Try{[System.Net.WebClient]::new().DownloadFile($UrlFileAndroidPlatformTools,$PathFileDownloadAndroidPlatformTools);$?}Catch{$false})
         if (-not($Success -and [System.IO.File]::Exists($PathFileDownloadAndroidPlatformTools))) {
             Throw ('ERROR: Failed to download "{0}".' -f ($UrlFileAndroidPlatformTools))
         }
-    
-      
+
+
         # Extract
         ## Write information
         Write-Information -MessageData ('Extracting "{0}" to "{1}".' -f $PathFileDownloadAndroidPlatformTools, $PathDirTemp)
-                
+
         ## See if 7-Zip is present
         $7Zip = [string]$(
             $([string[]]($env:ProgramW6432,${env:CommonProgramFiles(x86)})).Where{
@@ -240,11 +240,11 @@ function Install-AndroidPlatformToolsLatest {
             } | Select-Object -First 1
         )
 
-        ## Use 7-Zip if present, fall back to built in method                
+        ## Use 7-Zip if present, fall back to built in method
         if (-not[string]::IsNullOrEmpty($7Zip)) {
             $7ZipArgs = [string] 'x "{0}" -o"{1}" -y' -f $PathFileDownloadAndroidPlatformTools, $PathDirTemp
             Write-Information -MessageData ('Using 7-Zip "{0}" "{1}".' -f $7Zip,$7ZipArgs)
-            $null = Start-Process -WindowStyle 'Hidden' -Wait -FilePath $7Zip -ArgumentList $7ZipArgs                    
+            $null = Start-Process -WindowStyle 'Hidden' -Wait -FilePath $7Zip -ArgumentList $7ZipArgs
             $Success = [bool]($? -and [System.IO.Directory]::Exists($PathDirTempAndroidPlatformTools))
         }
         if ([string]::IsNullOrEmpty($7Zip) -or -not $Success) {
@@ -265,7 +265,7 @@ function Install-AndroidPlatformToolsLatest {
         if (-not($Success -and [System.IO.File]::Exists($PathFileTempFastboot))) {
             Throw ('ERROR: Failed to extract "{0}".' -f ($PathFileDownloadAndroidPlatformTools))
         }
-    
+
 
         # Version of download Android Platform Tools
         $VersionFileFastbootDownloaded = [System.Version]$(
@@ -282,12 +282,12 @@ function Install-AndroidPlatformToolsLatest {
 
 
         # Install Downloaded version if newer that Installed Version
-        if ($ForceInstallAndroidPlatformTools -or $VersionFileFastbootDownloaded -gt $VersionFileFastbootInstalled) {            
+        if ($ForceInstallAndroidPlatformTools -or $VersionFileFastbootDownloaded -gt $VersionFileFastbootInstalled) {
             # Write information
             if ($VersionFileFastbootInstalled -eq [System.Version]('0.0.0.0')) {
                 Write-Information -MessageData 'Android Platform Tools are not already installed.'
             }
-            else {                    
+            else {
                 if ($ForceInstallAndroidPlatformTools) {
                     Write-Information -MessageData '$ForceInstallAndroidPlatformTools is $true.'
                 }
@@ -305,7 +305,7 @@ function Install-AndroidPlatformToolsLatest {
             $([string[]]('adb','fastboot')).ForEach{
                 $null = Get-Process -Name $_ -ErrorAction 'SilentlyContinue' | Stop-Process -ErrorAction 'Stop'
             }
-            
+
             # Remove Existing Files if they Exist
             if ([System.IO.Directory]::Exists($PathDirAndroidPlatformTools)) {
                 $null = Remove-Item -Path $PathDirAndroidPlatformTools -Recurse -Force -ErrorAction 'Stop'
@@ -316,7 +316,7 @@ function Install-AndroidPlatformToolsLatest {
 
             # Install Downloaded Files
             Move-Item -Path $PathDirTempAndroidPlatformTools -Destination $PathDirAndroidPlatformTools -Force -Include '*'
-            
+
             # Capture Operation Success
             $Success = [bool] $?
         }
@@ -363,8 +363,8 @@ function Add-AndroidPlatformToolsToEnvironmentVariables {
             Optional Boolean [bool].
             Default Value: $false.
     #>
-            
-            
+
+
     # Input parameters
     [CmdletBinding()]
     [OutputType([System.Boolean])]
@@ -385,7 +385,7 @@ function Add-AndroidPlatformToolsToEnvironmentVariables {
         [ValidateSet($true,$false)]
         [bool] $SystemWide = $false
     )
-    
+
 
     # Begin
     Begin {
@@ -393,7 +393,7 @@ function Add-AndroidPlatformToolsToEnvironmentVariables {
         $Target  = [string] $(if($SystemWide){'Machine'}else{'User'})
     }
 
-            
+
     # Process
     Process {
         # Get existing PATH Environment Variable
@@ -464,93 +464,93 @@ function Get-AndroidPlatformToolsFromWebpage {
 
 
 #region    Main
-    # Help variables
-    ## Current user and context
-    $CurrentUserName = [string] [System.Security.Principal.WindowsIdentity]::GetCurrent().'Name'
-    $CurrentUserSID  = [string] [System.Security.Principal.WindowsIdentity]::GetCurrent().'User'.'Value'
-    $IsAdmin  = [bool](([System.Security.Principal.WindowsPrincipal]([System.Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator))
-    $IsSystem = [bool]($CurrentUserSID -eq 'S-1-5-18')
-    
-    ## Output path for Android Platform Tools
-    $PathDirAndroidPlatformTools = [string]('{0}\Android Platform Tools' -f $(if($SystemWide){${env:ProgramFiles(x86)}}else{$env:LOCALAPPDATA}))
-    
+# Help variables
+## Current user and context
+$CurrentUserName = [string] [System.Security.Principal.WindowsIdentity]::GetCurrent().'Name'
+$CurrentUserSID  = [string] [System.Security.Principal.WindowsIdentity]::GetCurrent().'User'.'Value'
+$IsAdmin  = [bool](([System.Security.Principal.WindowsPrincipal]([System.Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator))
+$IsSystem = [bool]($CurrentUserSID -eq 'S-1-5-18')
 
-    # Write info     
-    Write-Information -MessageData '# AndroodPlatformToolsUpdater.ps1'    
-    Write-Information -MessageData '## Info'
-    Write-Information -MessageData ('Current user name: "{0}".' -f $CurrentUserName)
-    Write-Information -MessageData ('Current user SID:  "{0}".' -f $CurrentUserSID)
-    Write-Information -MessageData ('Is administrator?  "{0}".' -f $IsAdmin.ToString())
-    Write-Information -MessageData ('Is SYSTEM?         "{0}".' -f $IsSystem.ToString())
-    Write-Information -MessageData ('Running in {0} context with{1} admin permissions.' -f $(if($SystemWide){'system'}else{'user'}),$(if(-not$IsAdmin){'out'}))
-    Write-Information -MessageData ('Output path for ADB tools: "{0}".' -f $PathDirAndroidPlatformTools)
-    
-
-    # Failproof
-    ## Check if running as Administrator if $SystemWide
-    if ($SystemWide -and -not $IsAdmin) {
-        Throw 'ERROR: Must run as administrator when $SystemWide is set to True.'
-        Exit 1
-    }
-    
-    ## Check if running as System if not $SystemWide
-    if (-not $SystemWide -and $IsSystem) {
-        Throw 'ERROR: Must not run as NT AUTHORITY\SYSTEM if $SystemWide is set to $false.'
-        Exit 1
-    }
-        
-
-    # Get version info
-    ## Introduce step
-    Write-Information -MessageData ('{0}# Get version info' -f [System.Environment]::NewLine)
-
-    ## Installed version
-    Write-Information -MessageData ('## Installed version')
-    $VersionInstalled = [System.Version](Get-AndroidPlatformToolsInstalledVersion -PathDirAndroidPlatformTools $PathDirAndroidPlatformTools)    
-    if ($VersionInstalled -ne [System.Version]('0.0.0.0')) {
-        Write-Information -MessageData ('Installed version: "{0}".' -f $VersionInstalled.ToString())
-    }
-    else {
-        Write-Information -MessageData 'Found no installed version.'
-    }
-    
-    ## Available version
-    Write-Information -MessageData ('{0}## Available version' -f [System.Environment]::NewLine)
-    $VersionAvailable = [System.Version](Get-AndroidPlatformToolsFromWebpage)
-    if ($VersionAvailable -ne [System.Version]('0.0.0.0')) {
-        Write-Information -MessageData ('Available version: "{0}".' -f $VersionAvailable.ToString())
-    }
-    else {
-        Write-Warning -Message 'Failed to parse version info from Google web page, will install newest version.'
-    }
+## Output path for Android Platform Tools
+$PathDirAndroidPlatformTools = [string]('{0}\Android Platform Tools' -f $(if($SystemWide){${env:ProgramFiles(x86)}}else{$env:LOCALAPPDATA}))
 
 
-    # Install platform-tools
-    Write-Information -MessageData ('{0}{0}# Install Android platform tools' -f [System.Environment]::NewLine)
-    if (
-        $ForceInstallAndroidPlatformTools -or
-        $VersionInstalled -eq [System.Version]('0.0.0.0') -or
-        $VersionAvailable -eq [System.Version]('0.0.0.0') -or 
-        $VersionAvailable -gt $VersionInstalled        
-    ) {
-        Write-Information -MessageData 'Installing newest version.'
-        $Success = [bool](
-            Install-AndroidPlatformToolsLatest -PathDirAndroidPlatformTools $PathDirAndroidPlatformTools -VersionFileFastbootInstalled $VersionInstalled
-        )
-        Write-Information -MessageData ('{0}Success? {1}.' -f "`t", $Success.ToString())
-    }
-    else {
-        Write-Information -MessageData 'Already on latest version.'
-    }
+# Write info
+Write-Information -MessageData '# AndroodPlatformToolsUpdater.ps1'
+Write-Information -MessageData '## Info'
+Write-Information -MessageData ('Current user name: "{0}".' -f $CurrentUserName)
+Write-Information -MessageData ('Current user SID:  "{0}".' -f $CurrentUserSID)
+Write-Information -MessageData ('Is administrator?  "{0}".' -f $IsAdmin.ToString())
+Write-Information -MessageData ('Is SYSTEM?         "{0}".' -f $IsSystem.ToString())
+Write-Information -MessageData ('Running in {0} context with{1} admin permissions.' -f $(if($SystemWide){'system'}else{'user'}),$(if(-not$IsAdmin){'out'}))
+Write-Information -MessageData ('Output path for ADB tools: "{0}".' -f $PathDirAndroidPlatformTools)
 
 
-    # Update environment variables for given context
-    Write-Information -MessageData ('{0}{0}# Update environmental variables' -f [System.Environment]::NewLine)
-    $Success = [bool](Add-AndroidPlatformToolsToEnvironmentVariables -PathDirAndroidPlatformTools $PathDirAndroidPlatformTools -SystemWide $SystemWide)
-    Write-Information -MessageData (
-        'Checking and eventually adding Android Platform Tools to {0} Environment Variables. Success? {1}.' -f (
-            [string]$(if($SystemWide){'System Wide'}else{'Current User'}),
-            $Success.ToString()
-        )
+# Failproof
+## Check if running as Administrator if $SystemWide
+if ($SystemWide -and -not $IsAdmin) {
+    Throw 'ERROR: Must run as administrator when $SystemWide is set to True.'
+    Exit 1
+}
+
+## Check if running as System if not $SystemWide
+if (-not $SystemWide -and $IsSystem) {
+    Throw 'ERROR: Must not run as NT AUTHORITY\SYSTEM if $SystemWide is set to $false.'
+    Exit 1
+}
+
+
+# Get version info
+## Introduce step
+Write-Information -MessageData ('{0}# Get version info' -f [System.Environment]::NewLine)
+
+## Installed version
+Write-Information -MessageData ('## Installed version')
+$VersionInstalled = [System.Version](Get-AndroidPlatformToolsInstalledVersion -PathDirAndroidPlatformTools $PathDirAndroidPlatformTools)
+if ($VersionInstalled -ne [System.Version]('0.0.0.0')) {
+    Write-Information -MessageData ('Installed version: "{0}".' -f $VersionInstalled.ToString())
+}
+else {
+    Write-Information -MessageData 'Found no installed version.'
+}
+
+## Available version
+Write-Information -MessageData ('{0}## Available version' -f [System.Environment]::NewLine)
+$VersionAvailable = [System.Version](Get-AndroidPlatformToolsFromWebpage)
+if ($VersionAvailable -ne [System.Version]('0.0.0.0')) {
+    Write-Information -MessageData ('Available version: "{0}".' -f $VersionAvailable.ToString())
+}
+else {
+    Write-Warning -Message 'Failed to parse version info from Google web page, will install newest version.'
+}
+
+
+# Install platform-tools
+Write-Information -MessageData ('{0}{0}# Install Android platform tools' -f [System.Environment]::NewLine)
+if (
+    $ForceInstallAndroidPlatformTools -or
+    $VersionInstalled -eq [System.Version]('0.0.0.0') -or
+    $VersionAvailable -eq [System.Version]('0.0.0.0') -or
+    $VersionAvailable -gt $VersionInstalled
+) {
+    Write-Information -MessageData 'Installing newest version.'
+    $Success = [bool](
+        Install-AndroidPlatformToolsLatest -PathDirAndroidPlatformTools $PathDirAndroidPlatformTools -VersionFileFastbootInstalled $VersionInstalled
     )
+    Write-Information -MessageData ('{0}Success? {1}.' -f "`t", $Success.ToString())
+}
+else {
+    Write-Information -MessageData 'Already on latest version.'
+}
+
+
+# Update environment variables for given context
+Write-Information -MessageData ('{0}{0}# Update environmental variables' -f [System.Environment]::NewLine)
+$Success = [bool](Add-AndroidPlatformToolsToEnvironmentVariables -PathDirAndroidPlatformTools $PathDirAndroidPlatformTools -SystemWide $SystemWide)
+Write-Information -MessageData (
+    'Checking and eventually adding Android Platform Tools to {0} Environment Variables. Success? {1}.' -f (
+        [string]$(if($SystemWide){'System Wide'}else{'Current User'}),
+        $Success.ToString()
+    )
+)
 #endregion Main

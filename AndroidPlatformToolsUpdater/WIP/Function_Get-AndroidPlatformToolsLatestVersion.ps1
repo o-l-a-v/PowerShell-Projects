@@ -4,11 +4,11 @@ function Get-AndroidPlatformToolsLatestVersion {
         .SYNOPSIS
             Gets Android Platform Tools latest version number by reading from the website.
     #>
-            
-            
+
+
     # Input parameters
     [CmdletBinding()]
-    [OutputType([System.Version])]            
+    [OutputType([System.Version])]
     Param()
 
 
@@ -30,7 +30,7 @@ function Get-AndroidPlatformToolsLatestVersion {
             $Version = [System.Version]('0.0')
         }
     }
-            
+
 
     # End
     End {
