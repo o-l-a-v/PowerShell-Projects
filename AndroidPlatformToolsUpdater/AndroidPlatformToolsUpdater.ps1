@@ -1,9 +1,5 @@
 ﻿#Requires -PSEdition Desktop -Version 5.1
 <#
-    .NAME
-        AndroidPlatformToolsUpdater.ps1
-
-
     .SYNOPSIS
         Installs and updates Android Platform Tools (ADB, Fastboot ++) and adds install path to Windows Environment Variables.
 
@@ -12,12 +8,27 @@
         Installs and updates Android Platform Tools (ADB, Fastboot ++) and adds install path to Windows Environment Variables.
 
         User Context
-            * Installs to "%localappdata%\Android Platform Tools"
-            * Will make Android Platform Tools available only to the user logged in when running this script
+        * Installs to "%localappdata%\Android Platform Tools"
+        * Will make Android Platform Tools available only to the user logged in when running this script
 
         System Context
-            * Installs to "%ProgramFiles(x86)%\Android Platform Tools"
-            * Will make Android Platform Tools available to all users on the machine
+        * Installs to "%ProgramFiles(x86)%\Android Platform Tools"
+        * Will make Android Platform Tools available to all users on the machine
+
+    .NOTES
+        Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
+        Created:  2019-03-10
+        Modified: 2024-12-19
+
+
+    .EXAMPLE
+        # Run from PowerShell ISE, system context
+        & $psISE.CurrentFile.FullPath
+
+
+    .EXAMPLE
+        # Run from PowerShell ISE, user context
+        & $psISE.CurrentFile.FullPath -SystemWide $false
 
 
     .PARAMETER SystemWide
@@ -29,29 +40,12 @@
     .PARAMETER ForceInstallAndroidPlatformTools
         Optional, Boolean.
         If $true script will install platform-tools, ignoring what ever version might be installed already.
-
-
-    .EXAMPLE
-        # Run from PowerShell ISE, system context
-        & $psISE.'CurrentFile'.'FullPath'
-
-
-    .EXAMPLE
-        # Run from PowerShell ISE, user context
-        & $psISE.'CurrentFile'.'FullPath' -SystemWide $false
-
-
-    .NOTES
-        Author:   Olav Rønnestad Birkeland
-        Created:  190310
-        Modified: 210910
 #>
 
 
 
-
-# Input parameters
-[OutputType($null)]
+# Input and expected output
+[OutputType([System.Void])]
 Param (
     [Parameter(Mandatory = $false, HelpMessage = 'Context - Current User only ($false) or System ($true).')]
     [bool] $SystemWide = $true,
@@ -59,7 +53,6 @@ Param (
     [Parameter(Mandatory = $false, HelpMessage = 'Will force reinstall no matter what installed version that might exist.')]
     [bool] $ForceInstallAndroidPlatformTools = $false
 )
-
 
 
 
@@ -71,7 +64,7 @@ $InformationPreference = 'Continue'
 $VerbosePreference     = 'SilentlyContinue'
 $WarningPreference     = 'Continue'
 
-## Behaviour
+## Behavior
 $ConfirmPreference     = 'None'
 $ProgressPreference    = 'SilentlyContinue'
 
@@ -110,7 +103,7 @@ function Get-AndroidPlatformToolsInstalledVersion {
     # Process
     Process {
         # Assets
-        $PathFileFastboot = [string]('{0}\fastboot.exe' -f ($PathDirAndroidPlatformTools))
+        $PathFileFastboot = [string] '{0}\fastboot.exe' -f $PathDirAndroidPlatformTools
 
         # Version of existing install, Version 0.0.0.0 if not found
         $VersionFileFastbootExisting = [System.Version]$(
@@ -368,16 +361,17 @@ function Add-AndroidPlatformToolsToEnvironmentVariables {
     # Input parameters
     [CmdletBinding()]
     [OutputType([System.Boolean])]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns','')]
     Param(
         [Parameter(Mandatory = $false)]
         [ValidateNotNullOrEmpty()]
         [ValidateScript({[System.IO.Directory]::Exists($_)})]
         [string] $PathDirAndroidPlatformTools = '{0}\Android Platform Tools' -f $(
             if ($SystemWide) {
-                ${env:ProgramFiles(x86)}
+                '%ProgramFiles(x86)%'
             }
             else {
-                $env:LOCALAPPDATA
+                '%LOCALAPPDATA%'
             }
         ),
 
@@ -396,14 +390,49 @@ function Add-AndroidPlatformToolsToEnvironmentVariables {
 
     # Process
     Process {
+        # Help variables
+        $EnvironmentalVariables = [psobject[]](
+            $('LOCALAPPDATA','ProgramFiles(x86)','USERPROFILE').ForEach{
+                [psobject]@{
+                    'Name'  = [string] $_
+                    'Value' = [string]([System.Environment]::GetEnvironmentVariable($_),'Process')
+                }
+            } | Sort-Object -Property @{'Expression'={[byte]$_.'Value'.'Length'};'Descending'=$true}
+        )
+        $RegistryPath = [string]$(
+            if ($SystemWide) {
+                'Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Environment'
+            }
+            else {
+                'Registry::HKEY_CURRENT_USER\Environment'
+            }
+        )
+
         # Get existing PATH Environment Variable
-        $PathVariableExisting = [string[]]([System.Environment]::GetEnvironmentVariables($Target).'Path'.Split(';') | Sort-Object)
+        $PathVariableExisting = [string[]]((Get-Item -Path $RegistryPath).GetValue('Path','','DoNotExpandEnvironmentNames').Split([System.IO.Path]::PathSeparator) | Sort-Object)
         $PathVariableNew      = [Management.Automation.PSSerializer]::DeSerialize([Management.Automation.PSSerializer]::Serialize($PathVariableExisting))
 
         # Add Android Platform Tools if not already present
         if ($PathVariableNew -notcontains $PathDirAndroidPlatformTools) {
             $PathVariableNew += $PathDirAndroidPlatformTools
         }
+
+        # Replace resolved paths with aliases
+        $PathVariableNew = [string[]](
+            $(
+                :ForEachPath foreach ($Path in $PathVariableNew) {
+                    # Resolve path
+                    $ResolvedPath = [string](cmd /c ('echo {0}' -f $Path))
+                    :ForEachEnvVar foreach ($EnvVar in $EnvironmentalVariables) {
+                        if ($Path.StartsWith($EnvVar.'Value','CurrentCultureIgnoreCase')) {
+                            $Path = $Path.Replace($EnvVar.'Value',('%{0}%' -f $EnvVar.'Name'))
+                            Continue ForEachEnvVar
+                        }
+                    }
+                    $Path
+                }
+            )
+        )
 
         # Clean up
         ## Remove ending '\' and return unique entries only
@@ -415,6 +444,8 @@ function Add-AndroidPlatformToolsToEnvironmentVariables {
                 else {
                     $_
                 }
+            }.Where{
+                [System.IO.Directory]::Exists((cmd /c ('echo {0}' -f $_)))
             } | Sort-Object -Unique
         )
 
@@ -440,6 +471,10 @@ function Add-AndroidPlatformToolsToEnvironmentVariables {
 
 #region    Get-AdbVersionFromWebpage
 function Get-AndroidPlatformToolsFromWebpage {
+    <#
+        .SYNOPSIS
+            Get latest version of Android Platform Tools from Google web site.
+    #>
     [OutputType([System.Version])]
     Param()
     Try {
@@ -502,7 +537,7 @@ if (-not $SystemWide -and $IsSystem) {
 
 # Get version info
 ## Introduce step
-Write-Information -MessageData ('{0}# Get version info' -f [System.Environment]::NewLine)
+Write-Information -MessageData ('{0}# Get version info' -f ([System.Environment]::NewLine*2))
 
 ## Installed version
 Write-Information -MessageData ('## Installed version')
@@ -526,7 +561,7 @@ else {
 
 
 # Install platform-tools
-Write-Information -MessageData ('{0}{0}# Install Android platform tools' -f [System.Environment]::NewLine)
+Write-Information -MessageData ('{0}# Install Android platform tools' -f ([System.Environment]::NewLine*2))
 if (
     $ForceInstallAndroidPlatformTools -or
     $VersionInstalled -eq [System.Version]('0.0.0.0') -or
@@ -545,7 +580,7 @@ else {
 
 
 # Update environment variables for given context
-Write-Information -MessageData ('{0}{0}# Update environmental variables' -f [System.Environment]::NewLine)
+Write-Information -MessageData ('{0}# Update environmental variables' -f ([System.Environment]::NewLine*2))
 $Success = [bool](Add-AndroidPlatformToolsToEnvironmentVariables -PathDirAndroidPlatformTools $PathDirAndroidPlatformTools -SystemWide $SystemWide)
 Write-Information -MessageData (
     'Checking and eventually adding Android Platform Tools to {0} Environment Variables. Success? {1}.' -f (

@@ -5,19 +5,16 @@ function Get-AndroidPlatformToolsLatestVersion {
             Gets Android Platform Tools latest version number by reading from the website.
     #>
 
-
-    # Input parameters
+    # Input and expected output
     [CmdletBinding()]
     [OutputType([System.Version])]
     Param()
-
 
     # Begin Function
     Begin {
         $Uri = [string] 'https://developer.android.com/studio/releases/platform-tools'
         Write-Verbose -Message ('Will try to get latest version number from "{0}".' -f $Uri)
     }
-
 
     # Process
     Process {
@@ -30,7 +27,6 @@ function Get-AndroidPlatformToolsLatestVersion {
             $Version = [System.Version]('0.0')
         }
     }
-
 
     # End
     End {
