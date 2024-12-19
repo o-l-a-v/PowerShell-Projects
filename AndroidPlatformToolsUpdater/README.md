@@ -9,7 +9,7 @@
 <!-- Make Markdownlint not complain about MD028 -->
 
 > [!NOTE]
-> I recommend using Scoop instead: <https://scoop.sh/#/apps?q=adb+fastboot>
+> I recommend using [Scoop](https://scoop.sh/#/apps?q=adb+fastboot) or [WinGet](https://github.com/microsoft/winget-pkgs/tree/master/manifests/g/Google/PlatformTools) instead.
 
 ## Disclaimer
 
