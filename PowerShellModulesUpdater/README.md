@@ -1,5 +1,11 @@
 # PowerShellModulesUpdater
 
+> [!CAUTION]
+> Don't run random scripts from the internet.
+>
+> * This script is provided as-is, you should run it with caution.
+> * If it breaks anything on your computer it's your fault.
+
 ## About
 
 A script that installs, updates (and cleans up old versions), and removes PowerShell modules and scripts.
