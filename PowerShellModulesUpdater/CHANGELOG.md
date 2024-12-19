@@ -13,6 +13,7 @@
 
 ### Changed
 
+* Use splatting for all uses of `Save-PSResource` to both make code more readable, and input parameters easier to apply/map.
 * Made PSSCriptAnalyzer happy:
   * Replace empty `Catch{}` blocks with something better.
   * Suppress `PSReviewUnusedParameter` for `SkipAuthenticodeCheck` because it's a false positive.

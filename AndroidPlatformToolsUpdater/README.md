@@ -1,4 +1,4 @@
-# Android Platfor Tools Updater
+# Android Platform Tools Updater
 
 > [!NOTE]
 > I recommend using Scoop instead: <https://scoop.sh/#/apps?q=adb+fastboot>
