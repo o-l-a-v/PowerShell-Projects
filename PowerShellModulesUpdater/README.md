@@ -20,7 +20,7 @@ The script originally ran on Windows using Windows PowerShell only.
 Since v1.17.0 the script can run on both (1) PowerShell and (2) Windows PowerShell.
 
 1. PowerShell \>= 7.3.X: Directly, or in Visual Studio Code with the PowerShell extension.
-2. Windows PowerShell 5.1: Directly, in PowerShell ISE, or in Visual Studio Code with the PowerShell extension.
+1. Windows PowerShell 5.1: Directly, in PowerShell ISE, or in Visual Studio Code with the PowerShell extension.
 
 Since v1.18.0 the script runs on both Windows and Linux. Probably MacOS too, but I don't have hardware to test on.
 

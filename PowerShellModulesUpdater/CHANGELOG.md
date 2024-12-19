@@ -5,7 +5,19 @@
 * Changelog format follows [Keep a Changelog](https://keepachangelog.com/en).
 * Versioning adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.19.0] - 2024-07-07
+## 1.19.2 - 2024-10-25
+
+### Fixed
+
+* `Install-SubModulesMissing`: Don't install if in `$ModulesUnwanted`.
+
+## 1.19.1 - 2024-07-16
+
+### Changed
+
+* PowerShell Gallery TCP latency test changed from `powershellgallery.com` to `www.powershellgallery.com` as apparently the redirect can go down: <https://github.com/PowerShell/PowerShellGallery/issues/280>.
+
+## 1.19.0 - 2024-07-07
 
 ### Added
 
@@ -21,14 +33,14 @@
   * Stats: Don't output stats if nothing was changed.
   * Install modules in parallel: Only output new message if status have changed, instead of every 500ms like previously.
 
-## [1.19.0-beta2] - 2024-04-15
+## 1.19.0-beta2 - 2024-04-15
 
 ### Added
 
 * Learned that PowerShell searches for scripts in the PATH environment variable.
   * `Set-PSModulePathUserContext` will now also add wanted scripts path to user context PATH environment variable.
 
-## [1.19.0-beta1] - 2024-03-27
+## 1.19.0-beta1 - 2024-03-27
 
 ### Added
 
@@ -43,13 +55,13 @@
 * Greatly reduced vervosity and amount of script output by only showing info about packages that will be installed instead.
   * Previously the script iterated all packages, and outputted whether to install/update or not do anything.
 
-## [1.18.2] - 2024-03-08
+## 1.18.2 - 2024-03-08
 
 ### Fixed
 
 * Indentation in `Write-Statistics` was not following the new way introduced in v1.18.0.
 
-## [1.18.1] - 2024-03-02
+## 1.18.1 - 2024-03-02
 
 ### Changed
 
@@ -60,7 +72,7 @@
 * In PowerShell 5.1, doing string `.Contains()` on an empty attribute throws an error.
   * Fix: Do `-not [string]::IsNullOrEmpty($_.'<attribute>')` before `$_.'<attribute>'.Contains('<something>')`.
 
-## [1.18.0] - 2024-02-18
+## 1.18.0 - 2024-02-18
 
 ### Added
 
@@ -82,7 +94,7 @@
   * Use `-ErrorAction SilentlyContinue` because PSScriptAnalyzer falsefully detects it as `PSPossibleIncorrectUsageOfRedirectionOperator`.
 * Exiting functions that has `[OutputType([System.Void])]` using `Break` exited the whole script, now using `return` instead.
 
-## [1.17.0] - 2024-02-08
+## 1.17.0 - 2024-02-08
 
 ### Added
 
@@ -113,14 +125,14 @@
 * Installing to user context now actually works, for both modules and scripts. More info on how under "Added".
 * Changed changelog syntax to ["Keep a Changelog"](https://keepachangelog.com/en), except for version numbers.
 
-## [1.16.0] - 2022-10-20
+## 1.16.0 - 2022-10-20
 
 ### Changed
 
 * Created a test to see if ```-AcceptLicense``` parameter is available for command ```PackageManagement\Install-Package```.
 * Converted some of the settings to input parameters (```param()```).
 
-## [1.15.0] - 220320
+## 1.15.0 - 220320
 
 ### Added
 
@@ -135,7 +147,7 @@
   * Short term fix: Ignore such version numbers.
   * See README.md for more info.
 
-## [1.14.0] - 2021-12-20
+## 1.14.0 - 2021-12-20
 
 ### Added
 
@@ -149,7 +161,7 @@
   * Workaround: Don't validate such version numbers at all.
   * Future: See ```README.md```.
 
-## [1.13.0] - 2021-09-14
+## 1.13.0 - 2021-09-14
 
 ### Added
 
@@ -160,7 +172,7 @@
 
 * Some touchups on output to reflect that the script now does both modules and scripts.
 
-## [1.12.0] - 2021-08-19
+## 1.12.0 - 2021-08-19
 
 ### Added
 
@@ -174,14 +186,14 @@
 
 ### Changed
 
-## [1.11.0] - 2021-06-14
+## 1.11.0 - 2021-06-14
 
 ### Changed
 
 * Added quicker check for prerequired components and modules:
   * If ```PackageManagement``` exists as module type ```Script```, not just ```Binary```, we should be good.
 
-## [1.10.0] - 2021-05-03
+## 1.10.0 - 2021-05-03
 
 ### Added
 
@@ -209,14 +221,14 @@
 * Using markdown syntax for headers for script output. One ```#``` for H1 etc.
 * Some syntax cleanup.
 
-## [1.9.1] - 2020-10-03
+## 1.9.1 - 2020-10-03
 
 ### Added
 
 * Added check to see if powershellgallery.com is up and responding.
 * Added ability to harcode module versions to keep/ now remove.
 
-## [1.9.0] - 2020-05-23
+## 1.9.0 - 2020-05-23
 
 ### Added
 
@@ -227,7 +239,7 @@
 
 * Corrected info about some of the modules in the list of modules to install.
 
-## [1.8.0] - 2020-04-07
+## 1.8.0 - 2020-04-07
 
 ### Changed
 
@@ -235,7 +247,7 @@
 * Some speed ups
   * Use ".'Property'" instead of "Select-Object -ExpandProperty 'Property'
 
-## [1.7.0] - 2020-03-23
+## 1.7.0 - 2020-03-23
 
 ### Fixed
 
@@ -249,14 +261,14 @@
 * Syntax fix, quotation marks on all dot properties
 * Some speed ups using .Where.
 
-## [1.6.0] - 2019-11-28
+## 1.6.0 - 2019-11-28
 
 ### Added
 
 * Added setting for modules you don't want to get updated.
   * $ModulesDontUpdate.
 
-## [1.5.2] - 2019-11-27
+## 1.5.2 - 2019-11-27
 
 ### Added
 
@@ -266,7 +278,7 @@
 
 * Minor code refactoring.
 
-## [1.5.1] - 2019-11-14
+## 1.5.1 - 2019-11-14
 
 ### Added
 
@@ -278,13 +290,13 @@
 * Use `[OutputType]` in each function.
 * Better markdown syntax for changelog.
 
-## [1.5.0] - 2019-10-22
+## 1.5.0 - 2019-10-22
 
 ### Added
 
 * Greatly improved speed by writing my own function for getting all installed versions of a module.
 
-## [1.4.1] - 2019-08-08
+## 1.4.1 - 2019-08-08
 
 ### Added
 
@@ -294,13 +306,13 @@
 
 * Fixed code style places I saw it lagged behind. Esthetics.
 
-## [1.4.0] - 2019-06-19
+## 1.4.0 - 2019-06-19
 
 ### Changed
 
 * Prerequirements are now handled automatically in the script, no need to flip a boolean for that anymore.
 
-## [1.3.4] - 2019-06-16
+## 1.3.4 - 2019-06-16
 
 ### Added
 
@@ -308,7 +320,7 @@
   * If PackageManagement was updated during the same session, PowerShell must be closed and reopened before outdated version can be removed.
 * Will make sure that the user does not try to uninstall "PackageManagement" or "PowerShellGet".
 
-## [1.3.3] - 2019-05-24
+## 1.3.3 - 2019-05-24
 
 ### Fixed
 
@@ -319,13 +331,13 @@
 
 * Better logic in the update installed modules function when a parent module is updated and submodules might have been updated aswell.
 
-## [1.3.2] - 2019-05-03
+## 1.3.2 - 2019-05-03
 
 ### Added
 
 * Added check for Execution Policy, will attempt to fix it if necessary by setting it to "Unrestricted" just for current process.
 
-## [1.3.1] - 2019-04-04
+## 1.3.1 - 2019-04-04
 
 ### Added
 
@@ -336,7 +348,7 @@
 
 * Would fail on a clean install of Windows 10, fixed now
 
-## [1.3.0] - 2019-04-01
+## 1.3.0 - 2019-04-01
 
 ### Fixed
 
@@ -348,13 +360,13 @@
 * UpdateInstalledModules
   * If a submodule, punctuation in the name, will check once again what version is installed, in case parent module updated it.
 
-## [1.2.0] - 2019-03-31
+## 1.2.0 - 2019-03-31
 
 ### Fixed
 
 * Used "$InstallMissingModules" instead of "$InstallMissingSubModules" for controlling weather the script should add missing sumodules. Type'o.
 
-## [1.2.0] - 2019-03-24
+## 1.2.0 - 2019-03-24
 
 ### Added
 
@@ -368,7 +380,7 @@
 * Missed a "#" on one of the output headings
 * Install missing modules: Success status after install would not display.
 
-## [1.1.0] - 2019-03-16
+## 1.1.0 - 2019-03-16
 
 ### Added
 
@@ -380,7 +392,7 @@
   * For instance: Az currently has 81 submodules, I only had about 60 installed. Now the script will add all submodules available from PowerShellGallery not already installed on the computer.
   * Controllable by boolean $InstallMissingSubModules
 
-## [1.0.1] - 2019-03-13
+## 1.0.1 - 2019-03-13
 
 ### Added
 
@@ -389,6 +401,6 @@
   * PowerShellGet (PowerShell Module)
   * Controllable by boolean $InstallPrerequirements
 
-## [1.0.0] - 2019-03-10
+## 1.0.0 - 2019-03-10
 
 * Initial Release

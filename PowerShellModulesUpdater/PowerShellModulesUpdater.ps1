@@ -20,7 +20,7 @@
     .NOTES
         Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
         Created:  2019-03-10
-        Modified: 2024-07-03
+        Modified: 2024-10-25
 
     .EXAMPLE
         # Run from PowerShell ISE or Visual Studio Code, user context
@@ -85,12 +85,14 @@ Param (
 $ModulesWanted = [string[]](
     'AIPService',                             # Microsoft. Used for managing Microsoft Azure Information Protection (AIP).
     'Az',                                     # Microsoft. Used for Azure Resources. Combines and extends functionality from AzureRM and AzureRM.Netcore.
+    'AzPolicyTest',                           # Tao Yang. Used for validating Azure policies with Pester.
     'AzSK',                                   # Microsoft. Azure Secure DevOps Kit. https://azsk.azurewebsites.net/00a-Setup/Readme.html
     'AzViz',                                  # Prateek Singh. Used for visualizing a Azure environment.
-    'AWSPowerShell.NetCore',                  # Amazon AWS
+    'AWSPowerShell.NetCore',                  # Amazon AWS.
     'Bicep',                                  # PSBicep. Provides the same functionality as Bicep CLI, plus some additional features to simplify the Bicep authoring experience.
     'BuildHelpers',                           # Warren Frame. Helper functions for PowerShell CI/CD scenarios.
     'ConfluencePS',                           # Atlassian, for interacting with Atlassian Confluence Rest API.
+    'ConvertToSARIF',                         # Microsoft. A cmdlet for converting PSScriptAnalyzer output to the SARIF format.
     'DefenderMAPS',                           # Alex Verboon, for testing connectivity to "MAPS connection for Microsoft Windows Defender".
     'Evergreen',                              # By Aaron Parker @ Stealth Puppy. For getting URL etc. to latest version of various applications on Windows.
     'EnterprisePolicyAsCode',                 # Microsoft. EPAC, Enterprise Azure Policy as Code.
@@ -102,6 +104,7 @@ $ModulesWanted = [string[]](
     'Invokeall',                              # Santhosh Sethumadhavan. Multithread PowerShell commands.
     'JWTDetails',                             # Darren J. Robinson. Used for decoding JWT, JSON Web Tokens.
     'Mailozaurr',                             # Przemyslaw Klys. Used for various email related tasks.
+    'MarkdownPS',                             # Alex Sarafian. Generate Markdown.
     'Microsoft.Graph',                        # Microsoft. Works with PowerShell Core.
     'Microsoft.Graph.Beta',                   # Microsoft. Works with PowerShell Core.
     'Microsoft.Online.SharePoint.PowerShell', # Microsoft. Used for managing SharePoint Online.
@@ -111,7 +114,8 @@ $ModulesWanted = [string[]](
     'Microsoft.PowerShell.SecretStore',       # Microsoft. Used for securely storing secrets locally.
     'Microsoft.PowerShell.ThreadJob',         # Microsoft. Successfor of "ThreadJob" originally by Paul Higinbotham.
     'Microsoft.RDInfra.RDPowerShell',         # Microsoft. Used for managing Windows Virtual Desktop.
-    'Microsoft.WinGet.Client',                # Microsoft.
+    'Microsoft.WinGet.Client',                # Microsoft. Used for running WinGet commands with a dedicated PowerShell module, vs. using the CLI.
+    #'Microsoft.WinGet.Configuration',         # Microsoft. Used to configure Winget.
     'MicrosoftGraphSecurity',                 # Microsoft. Used for interacting with Microsoft Graph Security API.
     'MicrosoftPowerBIMgmt',                   # Microsoft. Used for managing Power BI.
     'MicrosoftTeams',                         # Microsoft. Used for managing Microsoft Teams.
@@ -142,10 +146,12 @@ $ModulesWanted = [string[]](
     'PSWindowsUpdate',                        # Michal Gajda. Used for updating Windows.
     'RunAsUser',                              # Kelvin Tegelaar. Allows running as current user while running as SYSTEM using impersonation.
     'SCEPman',                                # SCEPman. Used for managing SCEPman.
+    'Scoop',                                  # Thomas Nieto. PowerShell module for Scoop.
     'SetBIOS',                                # Damien Van Robaeys. Used for setting BIOS settings for Lenovo, Dell and HP.
     'SharePointPnPPowerShellOnline',          # Microsoft. Used for managing SharePoint Online.
     'SpeculationControl',                     # Microsoft, by Matt Miller. To query speculation control settings (Meltdown, Spectr).
     'TaskJob',                                # Justin Grote. Enables you to take any .NET Task object and treat it like a PowerShell Job.
+    'VcRedist',                               # Aaron Parker. Lifecycle management for the Microsoft Visual C++ Redistributables.
     'VSTeam',                                 # Donovan Brown. Adds functionality for working with Azure DevOps and Team Foundation Server.
     'WindowsAutoPilotIntune',                 # Michael Niehaus @ Microsoft. Used for Intune AutoPilot stuff.
     'WinSCP'                                  # Thomas Malkewitz. WinSCP PowerShell Wrapper Module.
@@ -158,6 +164,7 @@ $ModulesUnwanted = [string[]](
     'Az.Insights',                            # Name changed to "Az.Monitor": https://learn.microsoft.com/en-us/powershell/azure/migrate-az-1.0.0#module-name-changes
     'Az.Profile',                             # Name changed to "Az.Accounts": https://learn.microsoft.com/en-us/powershell/azure/migrate-az-1.0.0#module-name-changes
     'Az.Tags',                                # Functionality merged into "Az.Resources": https://learn.microsoft.com/en-us/powershell/azure/migrate-az-1.0.0#module-name-changes
+    'Az.Tools',                               # I don't use any of them, and Az.Tools.Predictor randomly crashed vscode-powershell terminal.
     'Azure',                                  # (DEPRECATED, "Az" is its' successor) Microsoft. Used for managing Classic Azure resources/ objects.
     'AzureAD',                                # (DEPRECATED, "Microsoft.Graph" is its' successor) Microsoft. Used for managing Azure Active Directory resources/ objects.
     'AzureADPreview',                         # (DEPRECATED, "Microsoft.Graph" is its' successor) -^-
@@ -791,8 +798,8 @@ function Get-ModulesInstalled {
             $InstalledModulesGivenScope = [PSCustomObject[]](
                 $(
                     Try {
-                        Microsoft.PowerShell.PSResourceGet\Get-InstalledPSResource -Path $Script:ModulesPath | `
-                                Where-Object -FilterScript {
+                        Microsoft.PowerShell.PSResourceGet\Get-InstalledPSResource -Path $Script:ModulesPath |
+                            Where-Object -FilterScript {
                                 $_.'Type' -eq 'Module' -and
                                 $_.'Repository' -eq 'PSGallery' -and
                                 -not ($IncludePreReleaseVersions -and $_.'IsPrerelease')
@@ -978,7 +985,7 @@ function Install-ModulesMissing {
         }
 
         # Find missing modules in the PowerShell Gallery
-        Write-Information -MessageData 'Find info on all missing modules and dependencies'
+        Write-Information -MessageData 'Find info on all missing modules and dependencies.'
         $ModulesMissingPsgInfo = [PSCustomObject[]](
             Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds $ModulesMissing
         )
@@ -1131,7 +1138,13 @@ function Install-SubModulesMissing {
                 [PSCustomObject[]](
                     $AvailableSubModules.Where{
                         $_.'Name'.StartsWith('{0}.' -f $ParentModule.'Name') -and
-                        $_.'Author' -eq $ParentModule.'Author'
+                        $_.'Author' -eq $ParentModule.'Author' -and
+                        $(
+                            foreach ($ModuleUnwanted in $Script:ModulesUnwanted) {
+                                $_.'Name' -eq $ModuleUnwanted -or
+                                $_.'Name'.StartsWith($ModuleUnwanted+'.')
+                            }
+                        ) -notcontains $true
                     } | Select-Object -Property 'Name', 'Version'
                 )
             )
@@ -2071,14 +2084,14 @@ if (($ModulesWanted | Where-Object -FilterScript {$ModulesUnwanted -contains $_}
 if (
     -not $(
         if ($PSVersionTable.'PSEdition' -eq 'Core') {
-            Test-Connection -TargetName 'powershellgallery.com' -TcpPort 443 -TimeoutSeconds 2 -IPv4 -Quiet -ErrorAction 'SilentlyContinue'
+            Test-Connection -TargetName 'www.powershellgallery.com' -TcpPort 443 -TimeoutSeconds 2 -IPv4 -Quiet -ErrorAction 'SilentlyContinue'
         }
         else {
-            Test-NetConnection -ComputerName 'powershellgallery.com' -Port 443 -InformationLevel 'Quiet' -ErrorAction 'SilentlyContinue'
+            Test-NetConnection -ComputerName 'www.powershellgallery.com' -Port 443 -InformationLevel 'Quiet' -ErrorAction 'SilentlyContinue'
         }
     )
 ) {
-    Throw ('ERROR - Could not TCP connect to powershellgallery.com:443 within reasonable time. Do you have internet connection, or is the web site down?')
+    Throw ('ERROR - Could not TCP connect to www.powershellgallery.com:443 within reasonable time. Do you have internet connection, or is the web site down?')
 }
 
 ### Check that PowerShellGallery is responding within reasonable time
