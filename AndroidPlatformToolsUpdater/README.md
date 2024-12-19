@@ -2,6 +2,7 @@
 
 > [!NOTE]
 > I recommend using Scoop instead: <https://scoop.sh/#/apps?q=adb+fastboot>
+
 > [!CAUTION]
 > Don't run random scripts from the internet.
 >
