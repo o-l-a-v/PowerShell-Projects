@@ -3,7 +3,7 @@
 > [!CAUTION]
 > Don't run random scripts from the internet.
 >
-> * This script requires to run as administrator in order so install jxl-winthumb as a WIC decoder.
+> * This script requires to run as administrator in order to install jxl-winthumb as a WIC decoder.
 >   * Anything that requires to run as administrator should trigger your scpeticism.
 > * This script is provided as-is, you should run it with caution.
 > * If it breaks anything on your computer it's your fault.
