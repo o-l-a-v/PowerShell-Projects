@@ -64,7 +64,7 @@ $ConfirmPreference     = 'None'
 $ProgressPreference    = 'SilentlyContinue'
 
 
-$true ? 'yes' : 'no'
+$true ? 'yes' : 'no' # should trigger PSSA error?
 
 
 #region    Functions
