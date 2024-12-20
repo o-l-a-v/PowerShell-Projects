@@ -5,6 +5,12 @@
 * Changelog format follows [Keep a Changelog](https://keepachangelog.com/en).
 * Versioning adheres to [Semantic Versioning](https://semver.org/).
 
+## v1.2.2 - 2024-12-20
+
+### Fixed
+
+* The logic for adding and cleaning up env variables.
+
 ## v1.2.1 - 2024-12-19
 
 ### Fixed
