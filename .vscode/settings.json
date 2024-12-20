@@ -23,5 +23,5 @@
   "markdown.extension.orderedList.marker": "one",
   "markdown.updateLinksOnFileMove.enabled": "prompt",
   "powershell.scriptAnalysis.enable": true,
-  "powershell.scriptAnalysis.settingsPath": "./PSScriptAnalyzerSettings.psd1"
+  "powershell.scriptAnalysis.settingsPath": "../PSScriptAnalyzerSettings.psd1"
 }
