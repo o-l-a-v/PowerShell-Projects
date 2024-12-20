@@ -3,9 +3,6 @@ run-name: Lint PowerShell with PSScriptAnalyzer (ref "${{ github.ref }}")
 
 on:
   pull_request:
-    branches:
-      - main
-      - master
     paths:
       - '**.ps1'
 
@@ -37,9 +34,12 @@ jobs:
         shell: pwsh
         run: |
           # Collect paths of changed files
-          $Files = [string[]](
+          $FilePaths = [string[]](
               ConvertFrom-Json -InputObject '${{ steps.filter.outputs.ps1_files }}'
           )
 
           # Run PSSCriptAnalyzer
-          PSScriptAnalyzer\Invoke-ScriptAnalyzer -Settings './PSScriptAnalyzerSettings.psd1' -Path $Files
+          foreach ($FilePath in $FilePaths) {
+              Write-Information -InformationAction 'Continue' -MessageData ('# {0}' -f $FilePath)
+              PSScriptAnalyzer\Invoke-ScriptAnalyzer -Settings './PSScriptAnalyzerSettings.psd1' -Path $File
+          }
