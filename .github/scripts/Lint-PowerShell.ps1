@@ -2,6 +2,11 @@
     .SYNOPSIS
         Lint PowerShell files with PSScriptAnalyzer
 
+    .NOTES
+        Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
+        Created:  2024-12-20
+        Modified: 2024-12-20
+
     .EXAMPLE
         . $pseditor.GetEditorContext().CurrentFile.Path -FilePaths (Get-ChildItem -File -Recurse -Filter '*.ps1').'FullName'
 #>
