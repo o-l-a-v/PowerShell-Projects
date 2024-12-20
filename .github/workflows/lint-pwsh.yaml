@@ -41,5 +41,5 @@ jobs:
           # Run PSSCriptAnalyzer
           foreach ($FilePath in $FilePaths) {
               Write-Information -InformationAction 'Continue' -MessageData ('# {0}' -f $FilePath)
-              PSScriptAnalyzer\Invoke-ScriptAnalyzer -Settings './PSScriptAnalyzerSettings.psd1' -Path $File
+              PSScriptAnalyzer\Invoke-ScriptAnalyzer -Settings './PSScriptAnalyzerSettings.psd1' -Path $FilePath
           }
