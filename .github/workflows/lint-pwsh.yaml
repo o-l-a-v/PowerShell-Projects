@@ -33,13 +33,6 @@ jobs:
         if: steps.filter.outputs.ps1 == 'true'
         shell: pwsh
         run: |
-          # Collect paths of changed files
-          $FilePaths = [string[]](
+          & ./github/scripts/Lint-PowerShell.ps1 -FilePaths (
               ConvertFrom-Json -InputObject '${{ steps.filter.outputs.ps1_files }}'
           )
-
-          # Run PSSCriptAnalyzer
-          foreach ($FilePath in $FilePaths) {
-              Write-Information -InformationAction 'Continue' -MessageData ('# {0}' -f $FilePath)
-              PSScriptAnalyzer\Invoke-ScriptAnalyzer -Settings './PSScriptAnalyzerSettings.psd1' -Path $FilePath
-          }
