@@ -3,7 +3,6 @@
     .SYNOPSIS
         Installs and updates Android Platform Tools (ADB, Fastboot ++) and adds install path to Windows Environment Variables.
 
-
     .DESCRIPTION
         Installs and updates Android Platform Tools (ADB, Fastboot ++) and adds install path to Windows Environment Variables.
 
@@ -18,24 +17,20 @@
     .NOTES
         Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
         Created:  2019-03-10
-        Modified: 2024-12-19
-
-
-    .EXAMPLE
-        # Run from PowerShell ISE, system context
-        & $psISE.CurrentFile.FullPath
-
+        Modified: 2024-12-20
 
     .EXAMPLE
         # Run from PowerShell ISE, user context
-        & $psISE.CurrentFile.FullPath -SystemWide $false
+        & $psISE.CurrentFile.FullPath
 
+    .EXAMPLE
+        # Run from PowerShell ISE, system context
+        & $psISE.CurrentFile.FullPath -SystemWide $false
 
     .PARAMETER SystemWide
         Optional, Boolean.
         If $true script will install system wide (%ProgramFiles(x86)%), else for current user (%LOCALAPPDATA%)).
         Default value: $true.
-
 
     .PARAMETER ForceInstallAndroidPlatformTools
         Optional, Boolean.
@@ -48,7 +43,7 @@
 [OutputType([System.Void])]
 Param (
     [Parameter(Mandatory = $false, HelpMessage = 'Context - Current User only ($false) or System ($true).')]
-    [bool] $SystemWide = $true,
+    [bool] $SystemWide = $false,
 
     [Parameter(Mandatory = $false, HelpMessage = 'Will force reinstall no matter what installed version that might exist.')]
     [bool] $ForceInstallAndroidPlatformTools = $false
@@ -69,6 +64,7 @@ $ConfirmPreference     = 'None'
 $ProgressPreference    = 'SilentlyContinue'
 
 
+$true ? 'yes' : 'no'
 
 
 #region    Functions
@@ -86,7 +82,7 @@ function Get-AndroidPlatformToolsInstalledVersion {
     Param(
         [Parameter(Mandatory = $false)]
         [ValidateNotNullOrEmpty()]
-        [string] $PathDirAndroidPlatformTools = '{0}\Android Platform Tools' -f $(
+        $PathDirAndroidPlatformTools = [string] '{0}\Android Platform Tools' -f $(
             if ($SystemWide) {
                 ${env:ProgramFiles(x86)}
             }
@@ -95,6 +91,7 @@ function Get-AndroidPlatformToolsInstalledVersion {
             }
         )
     )
+
 
     # Begin
     Begin {}
@@ -392,12 +389,28 @@ function Add-AndroidPlatformToolsToEnvironmentVariables {
     Process {
         # Help variables
         $EnvironmentalVariables = [psobject[]](
-            $('LOCALAPPDATA','ProgramFiles(x86)','USERPROFILE').ForEach{
+            $(
+                [string[]](
+                    'ProgramFiles(x86)',
+                    'ProgramFiles'
+
+                ) + $(
+                    if (-not $SystemWide) {
+                        [string[]](
+                            'LOCALAPPDATA',
+                            'USERPROFILE'
+                        )
+                    }
+                )
+            ).ForEach{
                 [psobject]@{
                     'Name'  = [string] $_
-                    'Value' = [string]([System.Environment]::GetEnvironmentVariable($_),'Process')
+                    'Value' = [string] [System.Environment]::GetEnvironmentVariable($_,'Process')
                 }
-            } | Sort-Object -Property @{'Expression'={[byte]$_.'Value'.'Length'};'Descending'=$true}
+            } | Sort-Object -Property @{
+                'Expression' = {[byte]$_.'Value'.'Length'}
+                'Descending' = $true
+            }
         )
         $RegistryPath = [string]$(
             if ($SystemWide) {
@@ -422,14 +435,16 @@ function Add-AndroidPlatformToolsToEnvironmentVariables {
             $(
                 :ForEachPath foreach ($Path in $PathVariableNew) {
                     # Resolve path
-                    $ResolvedPath = [string](cmd /c ('echo {0}' -f $Path))
+                    $ResolvedPath = [string][System.Environment]::ExpandEnvironmentVariables($Path)
+                    # Replace start of path if it one of the defined environment variables
                     :ForEachEnvVar foreach ($EnvVar in $EnvironmentalVariables) {
-                        if ($Path.StartsWith($EnvVar.'Value','CurrentCultureIgnoreCase')) {
-                            $Path = $Path.Replace($EnvVar.'Value',('%{0}%' -f $EnvVar.'Name'))
+                        if ($ResolvedPath.StartsWith($EnvVar.'Value','CurrentCultureIgnoreCase')) {
+                            $ResolvedPath = $ResolvedPath.Replace($EnvVar.'Value',('%{0}%' -f $EnvVar.'Name'))
                             Continue ForEachEnvVar
                         }
                     }
-                    $Path
+                    # Return results
+                    $ResolvedPath
                 }
             )
         )
@@ -459,7 +474,6 @@ function Add-AndroidPlatformToolsToEnvironmentVariables {
             $Success = [bool] $true
         }
     }
-
 
     # End
     End {

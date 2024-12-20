@@ -1,0 +1,44 @@
+name: Lint PowerShell with PSScriptAnalyzer
+run-name: Lint PowerShell with PSScriptAnalyzer (ref "${{ github.ref }}")
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '**.ps1'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-powershell:
+    name: Lint PowerShell with PSScriptAnalyzer
+    runs-on: ubuntu-latest
+    steps:
+      - name: GitHub checkout branch "${{ github.head_ref }}" 🛎️
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Get changed files 🔍
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            ps1:
+              - added|modified: '**.ps1'
+          list-files: json
+
+      - name: Lint with PSScriptAnalyzer 📃
+        if: steps.filter.outputs.ps1 == 'true'
+        shell: pwsh
+        run: |
+          # Collect paths of changed files
+          $Files = [string[]](
+              ConvertFrom-Json -InputObject '${{ steps.filter.outputs.ps1_files }}'
+          )
+
+          # Run PSSCriptAnalyzer
+          PSScriptAnalyzer\Invoke-ScriptAnalyzer -Settings './PSScriptAnalyzerSettings.psd1' -Path $Files
