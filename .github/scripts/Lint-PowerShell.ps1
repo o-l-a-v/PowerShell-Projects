@@ -6,6 +6,8 @@
         . $pseditor.GetEditorContext().CurrentFile.Path -FilePaths (Get-ChildItem -File -Recurse -Filter '*.ps1').'FullName'
 #>
 
+
+# Input and expected output
 [OutputType([System.Void])]
 Param(
     [Parameter(Mandatory)]
