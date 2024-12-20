@@ -59,12 +59,11 @@ $InformationPreference = 'Continue'
 $VerbosePreference     = 'SilentlyContinue'
 $WarningPreference     = 'Continue'
 
+
 ## Behavior
 $ConfirmPreference     = 'None'
 $ProgressPreference    = 'SilentlyContinue'
 
-
-$true ? 'yes' : 'no'
 
 
 #region    Functions
@@ -483,6 +482,7 @@ function Add-AndroidPlatformToolsToEnvironmentVariables {
 #endregion Add-AndroidPlatformToolsToEnvironmentVariables
 
 
+
 #region    Get-AdbVersionFromWebpage
 function Get-AndroidPlatformToolsFromWebpage {
     <#
@@ -511,7 +511,6 @@ function Get-AndroidPlatformToolsFromWebpage {
 
 
 
-
 #region    Main
 # Help variables
 ## Current user and context
@@ -520,8 +519,10 @@ $CurrentUserSID  = [string] [System.Security.Principal.WindowsIdentity]::GetCurr
 $IsAdmin  = [bool](([System.Security.Principal.WindowsPrincipal]([System.Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator))
 $IsSystem = [bool]($CurrentUserSID -eq 'S-1-5-18')
 
+
 ## Output path for Android Platform Tools
 $PathDirAndroidPlatformTools = [string]('{0}\Android Platform Tools' -f $(if($SystemWide){${env:ProgramFiles(x86)}}else{$env:LOCALAPPDATA}))
+
 
 
 # Write info
@@ -535,12 +536,14 @@ Write-Information -MessageData ('Running in {0} context with{1} admin permission
 Write-Information -MessageData ('Output path for ADB tools: "{0}".' -f $PathDirAndroidPlatformTools)
 
 
+
 # Failproof
 ## Check if running as Administrator if $SystemWide
 if ($SystemWide -and -not $IsAdmin) {
     Throw 'ERROR: Must run as administrator when $SystemWide is set to True.'
     Exit 1
 }
+
 
 ## Check if running as System if not $SystemWide
 if (-not $SystemWide -and $IsSystem) {
@@ -549,9 +552,11 @@ if (-not $SystemWide -and $IsSystem) {
 }
 
 
+
 # Get version info
 ## Introduce step
 Write-Information -MessageData ('{0}# Get version info' -f ([System.Environment]::NewLine*2))
+
 
 ## Installed version
 Write-Information -MessageData ('## Installed version')
@@ -563,6 +568,7 @@ else {
     Write-Information -MessageData 'Found no installed version.'
 }
 
+
 ## Available version
 Write-Information -MessageData ('{0}## Available version' -f [System.Environment]::NewLine)
 $VersionAvailable = [System.Version](Get-AndroidPlatformToolsFromWebpage)
@@ -572,6 +578,7 @@ if ($VersionAvailable -ne [System.Version]('0.0.0.0')) {
 else {
     Write-Warning -Message 'Failed to parse version info from Google web page, will install newest version.'
 }
+
 
 
 # Install platform-tools
@@ -591,6 +598,7 @@ if (
 else {
     Write-Information -MessageData 'Already on latest version.'
 }
+
 
 
 # Update environment variables for given context
