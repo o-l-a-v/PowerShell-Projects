@@ -28,7 +28,7 @@ $ErrorActionPreference = 'Stop'
 $InformationPreference = 'Continue'
 
 
-# Collect linter results
+# Array list to collect linter findings
 $AllFindings = [System.Collections.Generic.List[PSCustomObject]]::new()
 
 
@@ -38,7 +38,7 @@ foreach ($FilePath in $FilePaths) {
     $Findings = [array](
         PSScriptAnalyzer\Invoke-ScriptAnalyzer -Settings $PssaSettingsFile -Path $FilePath
     )
-    if ($Results.'Count' -gt 0) {
+    if ($Findings.'Count' -gt 0) {
         $Findings | Format-List -Property 'RuleName', 'Severity', 'Line', 'Message'
         $AllFindings.Add(
             [PSCustomObject]@{
