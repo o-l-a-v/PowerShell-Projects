@@ -33,6 +33,7 @@
 
 
 # Input parameters and expected output
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingComputerNameHardcoded', Justification = 'There are no secret hostnames exposed in this script.')]
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SkipAuthenticodeCheck', Justification = 'False positive.')]
 [OutputType([System.Void])]
 Param (
@@ -2199,7 +2200,7 @@ if (
 
 ### Check that PowerShellGallery is responding within reasonable time
 if (-not[bool]$(Try{$null = Invoke-RestMethod -Method 'Get' -Uri 'https://www.powershellgallery.com' -TimeoutSec 3; $?}Catch{$false})) {
-    Throw ('ERROR - Could TCP connect to powershellgallery.com:443, but it did not manage to provide a response within reasonable time.')
+    Throw ('ERROR - Could TCP connect to powershellgallery.com:443, but it did not manage to provide a HTTP Get response within reasonable time.')
 }
 
 
