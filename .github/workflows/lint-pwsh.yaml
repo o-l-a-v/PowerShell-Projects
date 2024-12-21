@@ -34,6 +34,6 @@ jobs:
         if: steps.filter.outputs.ps1 == 'true'
         shell: pwsh
         run: |
-          & .github/scripts/Lint-PowerShell.ps1 -FilePaths (
+          & tools/Lint-PowerShell.ps1 -FilePaths (
               ConvertFrom-Json -InputObject '${{ steps.filter.outputs.ps1_files }}'
           )
