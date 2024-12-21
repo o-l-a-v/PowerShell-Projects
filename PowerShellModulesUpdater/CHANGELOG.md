@@ -5,6 +5,12 @@
 * Changelog format follows [Keep a Changelog](https://keepachangelog.com/en).
 * Versioning adheres to [Semantic Versioning](https://semver.org/).
 
+## 1.20.1 - 2024-12-21
+
+### Fixed
+
+* `-AuthenticodeCheck` requires code to be signed, so will not have it enabled by default.
+
 ## 1.20.0 - 2024-12-19
 
 ### Added

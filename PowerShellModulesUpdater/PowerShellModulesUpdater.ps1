@@ -17,7 +17,7 @@
     .NOTES
         Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
         Created:  2019-03-10
-        Modified: 2024-12-19
+        Modified: 2024-12-21
 
     .EXAMPLE
         # Run from PowerShell ISE or Visual Studio Code, user context
@@ -44,7 +44,7 @@ Param (
 
     [Alias('SkipPublisherCheck')]
     [Parameter(HelpMessage = 'Security, whether to skip checking signing of the module against alleged publisher.')]
-    [bool] $SkipAuthenticodeCheck = $false,
+    [bool] $SkipAuthenticodeCheck = $true,
 
     [Parameter(HelpMessage = 'Whether to install missing modules, specified in variable "$ModulesWanted".')]
     [bool] $InstallMissingModules = $true,
@@ -485,29 +485,33 @@ function Save-PSResourceInParallel {
         .NOTES
             Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
             Created:  2023-11-16
-            Modified: 2024-06-28
+            Modified: 2024-12-21
 
         .EXAMPLE
-            . $psEditor.GetEditorContext().CurrentFile.Path
             # All Az modules
             Save-PSResourceInParallel `
                 -Name (Find-PSResource -Repository 'PSGallery' -Type 'Module' -Name 'Az').'Dependencies'.'Name' `
-                -Path ([System.IO.Path]::Combine(([System.Environment]::GetFolderPath('Desktop')),'TestPS'))
-            # AWSPowerShell.NetCore
-            Save-PSResourceInParallel `
-                -Name 'AWSPowerShell.NetCore' `
+                -Path ([System.IO.Path]::Combine(([System.Environment]::GetFolderPath('Desktop')),'TestPS')) `
+                -InformationAction 'Continue'
+
+        .EXAMPLE
+            # One module: AWSPowerShell.NetCore
+            Save-PSResourceInParallel -Name 'AWSPowerShell.NetCore' -InformationAction 'Continue' `
                 -Path ([System.IO.Path]::Combine(([System.Environment]::GetFolderPath('Desktop')),'TestPS'))
     #>
 
     # Input parameters and expected output
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'NameParameterSet')]
     [OutputType([Microsoft.PowerShell.PSResourceGet.UtilClasses.PSResourceInfo[]])]
     Param(
-        [Parameter(Mandatory, HelpMessage = 'Name of the resource(s) you want saved.')]
+        [Parameter(Mandatory, HelpMessage = 'Name of the resource(s) you want saved.', ParameterSetName = 'NameParameterSet')]
         [string[]] $Name,
 
         [Parameter(HelpMessage = 'Whether to include XML.')]
         [bool] $IncludeXml = [bool] $true,
+
+        [Parameter(Mandatory, ParameterSetName = 'InputObjectParameterSet')]
+        [Microsoft.PowerShell.PSResourceGet.UtilClasses.PSResourceInfo[]] $InputObject,
 
         [Parameter(Mandatory, HelpMessage = 'Where to save the resource to.')]
         [ValidateNotNullOrEmpty()]
@@ -518,12 +522,19 @@ function Save-PSResourceInParallel {
         [ValidateNotNullOrEmpty()]
         [string] $PSResourceGetPath = (Get-Module -Name 'Microsoft.PowerShell.PSResourceGet' | Select-Object -First 1 -ExpandProperty 'Path'),
 
-        [Parameter(HelpMessage = 'What PSResourceGet repository to use.')]
+        [Parameter(HelpMessage = 'What PSResourceGet repository to use.', ParameterSetName = 'InputObjectParameterSet')]
+        [Parameter(HelpMessage = 'What PSResourceGet repository to use.', ParameterSetName = 'NameParameterSet')]
         [ValidateNotNullOrEmpty()]
         [string] $Repository = 'PSGallery',
 
+        [Parameter(HelpMessage = 'A hashtable that specifies resources to install.', ParameterSetName = 'RequiredResourceFileParameterSet')]
+        [hashtable] $RequiredResource,
+
+        [Parameter(HelpMessage = 'Check validation for signed and catalog files.')]
+        [bool] $AuthenticodeCheck = $false,
+
         [Parameter(HelpMessage = 'Whether to skip dependency check.')]
-        [bool] $SkipDependencyCheck = [bool] $true,
+        [bool] $SkipDependencyCheck = $true,
 
         [Parameter(HelpMessage = 'Override temporary path.')]
         [string] $TemporaryPath,
@@ -557,7 +568,7 @@ function Save-PSResourceInParallel {
                 [ValidateNotNullOrEmpty()]
                 [string] $PSResourceGetPath,
 
-                [Parameter(Mandatory)]
+                [Parameter()]
                 [ValidateNotNullOrEmpty()]
                 [string] $Repository,
 
@@ -568,20 +579,28 @@ function Save-PSResourceInParallel {
                 [string] $TemporaryPath,
 
                 [Parameter()]
-                [bool] $TrustRepository = $true
+                [bool] $TrustRepository = $true,
+
+                [Parameter()]
+                [string] $Version
             )
             $ErrorActionPreference = 'Stop'
             $null = Import-Module -Name $PSResourceGetPath
             $Splat = [ordered]@{
-                'AuthenticodeCheck'   = [bool] -not $SkipAuthenticodeCheck
+                'AuthenticodeCheck'   = [bool] $AuthenticodeCheck
                 'IncludeXml'          = [bool] $IncludeXml
                 'Name'                = [string] $Name
-                'Repository'          = [string] $Repository
                 'Path'                = [string] $Path
                 'SkipDependencyCheck' = [bool] $SkipDependencyCheck
                 'TrustRepository'     = [bool] $TrustRepository
             }
-            if ($TemporaryPath) {
+            if ($PSBoundParameters.ContainsKey('Repository')) {
+                $Splat.'Repository' = [string] $Repository
+            }
+            if ($PSBoundParameters.ContainsKey('Version')) {
+                $Splat.'Version' = [string] $Version
+            }
+            if ($PSBoundParameters.ContainsKey('TemporaryPath')) {
                 $Splat.'TemporaryPath' = [string] $TemporaryPath
             }
             Microsoft.PowerShell.PSResourceGet\Save-PSResource @Splat
@@ -595,26 +614,90 @@ function Save-PSResourceInParallel {
 
     # Process
     Process {
+        # Assets
+        $SplatArray = [System.Collections.Generic.List[ordered]]::new()
+        # Create splat array for jobs
+        if ($PSCmdlet.'ParameterSetName' -eq 'NameParameterSet') {
+            foreach ($ModuleName in $Name) {
+                $Splat = [ordered]@{
+                    'AuthenticodeCheck'   = [bool] $AuthenticodeCheck
+                    'IncludeXml'          = [bool] $IncludeXml
+                    'Name'                = [string] $ModuleName
+                    'Path'                = [string] $Path
+                    'PSResourceGetPath'   = [string] $PSResourceGetPath
+                    'SkipDependencyCheck' = [bool] $SkipDependencyCheck
+                    'TrustRepository'     = [bool] $TrustRepository
+                }
+                if ($PSBoundParameters.ContainsKey('Repository')) {
+                    $Splat.'Repository' = [string] $Repository
+                }
+                if ($TemporaryPath) {
+                    $Splat.'TemporaryPath' = [string] $TemporaryPath
+                }
+                $SplatArray.Add($Splat)
+            }
+        }
+        elseif ($PSCmdlet.'ParameterSetName' -eq 'RequiredResourceFileParameterSet') {
+            $RequiredResource.'Keys'.ForEach{
+                $Splat = [ordered]@{
+                    # From $RequiredResource
+                    'Name'                = [string] $_
+                    # Not from $RequiredResource
+                    'AuthenticodeCheck'   = [bool] $AuthenticodeCheck
+                    'IncludeXml'          = [bool] $IncludeXml
+                    'Path'                = [string] $Path
+                    'PSResourceGetPath'   = [string] $PSResourceGetPath
+                    'SkipDependencyCheck' = [bool] $SkipDependencyCheck
+                    'TrustRepository'     = [bool] $TrustRepository
+                }
+                if (-not [string]::IsNullOrEmpty($RequiredResource.$_.'Repository')) {
+                    $Splat.'Repository' = [string] $RequiredResource.$_.'Repository'
+                }
+                if (-not [string]::IsNullOrEmpty($RequiredResource.$_.'Version')) {
+                    $Splat.'Version' = [string] $RequiredResource.$_.'Version'
+                }
+                if ($TemporaryPath) {
+                    $Splat.'TemporaryPath' = [string] $TemporaryPath
+                }
+                $SplatArray.Add($Splat)
+            }
+        }
+        elseif ($PSCmdlet.'ParameterSetName' -eq 'InputObjectParameterSet') {
+            $InputObject.ForEach{
+                $Splat = [ordered]@{
+                    # From $InputObject
+                    'Name'                = [string] $_.'Name'
+                    # Not from $RequiredResource
+                    'AuthenticodeCheck'   = [bool] $AuthenticodeCheck
+                    'IncludeXml'          = [bool] $IncludeXml
+                    'Path'                = [string] $Path
+                    'PSResourceGetPath'   = [string] $PSResourceGetPath
+                    'SkipDependencyCheck' = [bool] $SkipDependencyCheck
+                    'TrustRepository'     = [bool] $TrustRepository
+                }
+                if (-not [string]::IsNullOrEmpty($_.'Repository')) {
+                    $Splat.'Repository' = [string] $_.'Repository'
+                }
+                if (-not [string]::IsNullOrEmpty($_.'Version')) {
+                    $Splat.'Version' = [string] $_.'Version'
+                }
+                if ($TemporaryPath) {
+                    $Splat.'TemporaryPath' = [string] $TemporaryPath
+                }
+                $SplatArray.Add($Splat)
+            }
+        }
+        else {
+            Throw ('Unhandled ParameterSetName "{0}".' -f $PSCmdlet.'ParameterSetName')
+        }
         # Start jobs in the runspace pool
         $RunspacePoolJobs = [PSCustomObject[]](
             $(
-                foreach ($ModuleName in $Name) {
-                    $Parameters = [ordered]@{
-                        'IncludeXml'          = [bool] $IncludeXml
-                        'Name'                = [string] $ModuleName
-                        'Path'                = [string] $Path
-                        'PSResourceGetPath'   = [string] $PSResourceGetPath
-                        'Repository'          = [string] $Repository
-                        'SkipDependencyCheck' = [bool] $SkipDependencyCheck
-                        'TrustRepository'     = [bool] $TrustRepository
-                    }
-                    if ($TemporaryPath) {
-                        $Parameters.'TemporaryPath' = [string] $TemporaryPath
-                    }
-                    $PowerShellObject = [powershell]::Create().AddScript($ScriptBlock).AddParameters($Parameters)
+                foreach ($Splat in $SplatArray) {
+                    $PowerShellObject = [powershell]::Create().AddScript($ScriptBlock).AddParameters($Splat)
                     $PowerShellObject.'RunspacePool' = $RunspacePool
                     [PSCustomObject]@{
-                        'ModuleName' = $ModuleName
+                        'ModuleName' = [string] $Splat.'Name'
                         'Instance'   = $PowerShellObject
                         'Result'     = $PowerShellObject.BeginInvoke()
                     }
@@ -889,6 +972,7 @@ function Update-ModulesInstalled {
         if ($PSCmdlet.ShouldProcess(('{0} modules' -f $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString()), 'update')) {
             Write-Information -MessageData ('Updating {0} outdated module(s) in parallel.' -f $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString())
             $Splat = [ordered]@{
+                'AuthenticodeCheck'   = [bool](-not $SkipAuthenticodeCheck)
                 'IncludeXml'          = [bool] $true
                 'Name'                = [string[]] $ModulesInstalledWithNewerVersionAvailable.'Name'
                 'Path'                = [string] $Script:ModulesPath
@@ -1019,6 +1103,7 @@ function Install-ModulesMissing {
 
         # Install missing modules
         $Splat = [ordered]@{
+            'AuthenticodeCheck'   = [bool](-not $SkipAuthenticodeCheck)
             'IncludeXml'          = [bool] $true
             'Name'                = [string[]] $ModulesMissingPsgInfo.'Name'
             'Path'                = [string] $Script:ModulesPath
@@ -1169,6 +1254,7 @@ function Install-SubModulesMissing {
         # Install missing submodules in parallel
         Write-Information -MessageData ('Installing {0} missing submodule(s) in parallel.' -f $SubModulesMissing.'Count'.ToString())
         $Splat = [ordered]@{
+            'AuthenticodeCheck'   = [bool](-not $SkipAuthenticodeCheck)
             'IncludeXml'          = [bool] $true
             'Name'                = [string[]] $SubModulesMissing.'Name'
             'Path'                = [string] $Script:ModulesPath
@@ -1624,7 +1710,7 @@ function Install-ScriptsMissing {
                 }
                 # Install script
                 $Splat = [ordered]@{
-                    'AuthenticodeCheck'   = [bool] -not $SkipAuthenticodeCheck
+                    'AuthenticodeCheck'   = [bool](-not $SkipAuthenticodeCheck)
                     'IncludeXml'          = [bool] $true
                     'Name'                = [string] $Script
                     'Path'                = [string] $Script:ScriptsPath
@@ -1745,7 +1831,7 @@ function Update-ScriptsInstalled {
 
                 # Install script
                 $Splat = [ordered]@{
-                    'AuthenticodeCheck'   = [bool] -not $SkipAuthenticodeCheck
+                    'AuthenticodeCheck'   = [bool](-not $SkipAuthenticodeCheck)
                     'IncludeXml'          = [bool] $true
                     'Name'                = [string] $_.'Name'
                     'Path'                = [string] $Script:ScriptsPath
