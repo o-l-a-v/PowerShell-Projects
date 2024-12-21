@@ -33,7 +33,7 @@
 
 
 # Input parameters and expected output
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingComputerNameHardcoded', Justification = 'There are no secret hostnames exposed in this script.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingComputerNameHardcoded', '', Justification = 'There are no secret hostnames exposed in this script.')]
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SkipAuthenticodeCheck', Justification = 'False positive.')]
 [OutputType([System.Void])]
 Param (
