@@ -1,6 +1,6 @@
 name: Lint PowerShell with PSScriptAnalyzer
 
-run-name: 'Lint PowerShell with PSScriptAnalyzer - [${{ github.event.pull_request.title }} #${{ github.event.pull_request.number }}] by @${{ github.actor }}'
+run-name: '${{ github.workflow }} - [${{ github.event.pull_request.title }} #${{ github.event.pull_request.number }}] by @${{ github.actor }}'
 
 on:
   pull_request:
@@ -18,11 +18,11 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - name: GitHub checkout branch "${{ github.head_ref }}" 🛎️
+      - name: 🛎️ GitHub checkout branch "${{ github.head_ref }}"
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Get changed files 🔍
+      - name: 🔍 Get changed files
         id: filter
         uses: dorny/paths-filter@v3
         with:
@@ -30,7 +30,7 @@ jobs:
             ps1:
               - added|modified: '**.ps1'
           list-files: json
-      - name: Lint with PSScriptAnalyzer 📃
+      - name: 🔍 Lint with PSScriptAnalyzer
         if: steps.filter.outputs.ps1 == 'true'
         shell: pwsh
         run: |
