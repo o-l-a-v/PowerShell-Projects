@@ -14,13 +14,14 @@ concurrency:
 jobs:
   lint-powershell:
     name: Lint PowerShell with PSScriptAnalyzer
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - name: GitHub checkout branch "${{ github.head_ref }}" 🛎️
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-
       - name: Get changed files 🔍
         id: filter
         uses: dorny/paths-filter@v3
@@ -29,7 +30,6 @@ jobs:
             ps1:
               - added|modified: '**.ps1'
           list-files: json
-
       - name: Lint with PSScriptAnalyzer 📃
         if: steps.filter.outputs.ps1 == 'true'
         shell: pwsh

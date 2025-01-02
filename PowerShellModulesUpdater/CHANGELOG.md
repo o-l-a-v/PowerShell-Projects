@@ -5,6 +5,12 @@
 * Changelog format follows [Keep a Changelog](https://keepachangelog.com/en).
 * Versioning adheres to [Semantic Versioning](https://semver.org/).
 
+## 1.20.2 - 2024-12-27
+
+### Fixed
+
+* Added `-AuthenticodeCheck` input parameter when installing one PSResource only.
+
 ## 1.20.1 - 2024-12-21
 
 ### Fixed
