@@ -17,7 +17,7 @@
     .NOTES
         Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
         Created:  2019-03-10
-        Modified: 2024-12-21
+        Modified: 2024-12-27
 
     .EXAMPLE
         # Run from PowerShell ISE or Visual Studio Code, user context
@@ -486,7 +486,7 @@ function Save-PSResourceInParallel {
         .NOTES
             Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
             Created:  2023-11-16
-            Modified: 2024-12-21
+            Modified: 2024-12-27
 
         .EXAMPLE
             # All Az modules
@@ -572,6 +572,9 @@ function Save-PSResourceInParallel {
                 [Parameter()]
                 [ValidateNotNullOrEmpty()]
                 [string] $Repository,
+
+                [Parameter()]
+                [bool] $AuthenticodeCheck = $false,
 
                 [Parameter()]
                 [bool] $SkipDependencyCheck = $true,
@@ -971,7 +974,12 @@ function Update-ModulesInstalled {
 
         # Update outdated modules
         if ($PSCmdlet.ShouldProcess(('{0} modules' -f $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString()), 'update')) {
-            Write-Information -MessageData ('Updating {0} outdated module(s) in parallel.' -f $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString())
+            if ($ModulesInstalledWithNewerVersionAvailable.'Count' -eq 1) {
+                Write-Information -MessageData 'Updating one outdated module.'
+            }
+            else {
+                Write-Information -MessageData ('Updating {0} outdated modules in parallel.' -f $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString())
+            }
             $Splat = [ordered]@{
                 'AuthenticodeCheck'   = [bool](-not $SkipAuthenticodeCheck)
                 'IncludeXml'          = [bool] $true
@@ -1253,7 +1261,12 @@ function Install-SubModulesMissing {
         }
 
         # Install missing submodules in parallel
-        Write-Information -MessageData ('Installing {0} missing submodule(s) in parallel.' -f $SubModulesMissing.'Count'.ToString())
+        if ($SubModulesMissing.'Count' -eq 1) {
+            Write-Information -MessageData 'Installing one missing submodule.'
+        }
+        else {
+            Write-Information -MessageData ('Installing {0} missing submodules in parallel.' -f $SubModulesMissing.'Count'.ToString())
+        }
         $Splat = [ordered]@{
             'AuthenticodeCheck'   = [bool](-not $SkipAuthenticodeCheck)
             'IncludeXml'          = [bool] $true
