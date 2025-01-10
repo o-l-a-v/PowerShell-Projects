@@ -16,6 +16,7 @@ jobs:
     name: Lint PowerShell with PSScriptAnalyzer
     permissions:
       contents: read
+      pull-requests: read
     runs-on: ubuntu-latest
     steps:
       - name: 🛎️ GitHub checkout branch "${{ github.head_ref }}"
