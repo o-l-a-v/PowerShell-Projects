@@ -1,5 +1,8 @@
 @{
     IncludeDefaultRules = $true
+    ExcludeRules        = @(
+        'PSUseBOMForUnicodeEncodedFile'
+    )
     Rules               = @{
         PSUseCompatibleSyntax = @{
             Enable         = $true
