@@ -8,7 +8,7 @@ on:
       - .github/workflows/**
 
 jobs:
-  zizmor:
+  lint-workflows:
     name: Run zizmor latest via PyPI
     permissions:
       contents: read
