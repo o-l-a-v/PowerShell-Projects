@@ -17,7 +17,7 @@
     .NOTES
         Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
         Created:  2019-03-10
-        Modified: 2024-12-27
+        Modified: 2025-01-13
 
     .EXAMPLE
         # Run from PowerShell ISE or Visual Studio Code, user context
@@ -34,6 +34,7 @@
 
 # Input parameters and expected output
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingComputerNameHardcoded', '', Justification = 'There are no secret hostnames exposed in this script.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'AcceptLicenses', Justification = 'False positive.')]
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SkipAuthenticodeCheck', Justification = 'False positive.')]
 [OutputType([System.Void])]
 Param (
@@ -231,15 +232,11 @@ function Find-PSGalleryPackageLatestVersionUsingApiInBatch {
 
         .NOTES
             Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
-            Created:  240313
-            Modified: 240330
+            Created:  2024-03-13
+            Modified: 2025-01-13
 
         .EXAMPLE
             Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds 'Az.Accounts','Az.Resources' -Verbose
-            Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds 'Az.CosmosDB' -IncludePrerelease -Verbose -As
-            Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds 'Az.*' -MinimalInfo -Verbose
-            Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds 'Az.*' -AsHashtable -Verbose
-            Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds 'Az.*' -AsHashtable -MinimalInfo -Verbose
     #>
 
     # Input parameters and expected output
@@ -299,10 +296,10 @@ function Find-PSGalleryPackageLatestVersionUsingApiInBatch {
         $VersionFilter = [string](
             $(
                 if ($IncludePrerelease.'IsPresent') {
-                    'IsAbsoluteLatestVersion'
+                    'IsAbsoluteLatestVersion eq true'
                 }
                 else {
-                    'IsLatestVersion and not IsPrerelease'
+                    'IsLatestVersion eq true and IsPrerelease eq false'
                 }
             )
         )
@@ -420,6 +417,16 @@ function Find-PSGalleryPackageLatestVersionUsingApiInBatch {
                 $Results.Where{
                     -not [string]::IsNullOrEmpty($_.'Id')
                 }.ForEach{
+                    $Tags = [string[]](
+                        $(
+                            if ($_.'properties'.'Tags' -is [System.Xml.XmlLinkedNode]) {
+                                $_.'properties'.'Tags'.'#text'
+                            }
+                            else {
+                                $_.'properties'.'Tags'
+                            }
+                        ).Split(' ', [StringSplitOptions]::RemoveEmptyEntries) | Sort-Object -Unique
+                    )
                     [PSCustomObject]@{
                         'Name'                     = [string] $_.'title'.'#text'
                         'Author'                   = [string] $_.'author'.'name'
@@ -437,15 +444,21 @@ function Find-PSGalleryPackageLatestVersionUsingApiInBatch {
                         'Owners'                   = [string] $_.'properties'.'owners'
                         'PublishedDate'            = [nullable[datetime]] $_.'properties'.'Published'.'#text'
                         'RequireLicenseAcceptance' = [bool]($_.'properties'.'RequireLicenseAcceptance'.'#text' -eq 'true')
-                        'Tags'                     = [string[]](
-                            $(
-                                if ($_.'properties'.'Tags' -is [System.Xml.XmlLinkedNode]) {
-                                    $_.'properties'.'Tags'.'#text'
-                                }
-                                else {
-                                    $_.'properties'.'Tags'
-                                }
-                            ).Split(' ', [StringSplitOptions]::RemoveEmptyEntries) | Sort-Object -Unique)
+                        'Tags'                     = [string[]] $Tags
+                        'Type'                     = [string]$(
+                            if ([string]::IsNullOrWhiteSpace($Tags)) {
+                                'Unknown'
+                            }
+                            elseif ($Tags.Contains('PSModule')) {
+                                'Module'
+                            }
+                            elseif ($Tags.Contains('PSScript')) {
+                                'Script'
+                            }
+                            else {
+                                'Unknown'
+                            }
+                        )
                         'Unlisted'                 = [bool]$(
                             [string]::IsNullOrEmpty($_.'properties'.'Published'.'#text') -or
                             $([datetime]($_.'properties'.'Published'.'#text')).'Year' -le 1900
@@ -486,7 +499,7 @@ function Save-PSResourceInParallel {
         .NOTES
             Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
             Created:  2023-11-16
-            Modified: 2024-12-27
+            Modified: 2024-01-13
 
         .EXAMPLE
             # All Az modules
@@ -531,6 +544,9 @@ function Save-PSResourceInParallel {
         [Parameter(HelpMessage = 'A hashtable that specifies resources to install.', ParameterSetName = 'RequiredResourceFileParameterSet')]
         [hashtable] $RequiredResource,
 
+        [Parameter(HelpMessage = 'Whether to accept licenses for packages that requires it, defaults to false.')]
+        [bool] $AcceptLicense,
+
         [Parameter(HelpMessage = 'Check validation for signed and catalog files.')]
         [bool] $AuthenticodeCheck = $false,
 
@@ -574,6 +590,9 @@ function Save-PSResourceInParallel {
                 [string] $Repository,
 
                 [Parameter()]
+                [bool] $AcceptLicense = $false,
+
+                [Parameter()]
                 [bool] $AuthenticodeCheck = $false,
 
                 [Parameter()]
@@ -590,7 +609,9 @@ function Save-PSResourceInParallel {
             )
             $ErrorActionPreference = 'Stop'
             $null = Import-Module -Name $PSResourceGetPath
+            # Create splat variable based on input
             $Splat = [ordered]@{
+                'AcceptLicense'       = [bool] $AcceptLicense
                 'AuthenticodeCheck'   = [bool] $AuthenticodeCheck
                 'IncludeXml'          = [bool] $IncludeXml
                 'Name'                = [string] $Name
@@ -607,7 +628,21 @@ function Save-PSResourceInParallel {
             if ($PSBoundParameters.ContainsKey('TemporaryPath')) {
                 $Splat.'TemporaryPath' = [string] $TemporaryPath
             }
-            Microsoft.PowerShell.PSResourceGet\Save-PSResource @Splat
+            # Retry if DNS fails to resolve
+            Try {
+                Microsoft.PowerShell.PSResourceGet\Save-PSResource @Splat
+            }
+            Catch {
+                if (
+                    -not [string]::IsNullOrWhiteSpace($_.'ErrorRecord'.'Exception'.'Message') -and
+                    $_.'ErrorRecord'.'Exception'.'Message'.Contains('No such host is known.')
+                ) {
+                    Microsoft.PowerShell.PSResourceGet\Save-PSResource @Splat
+                }
+                else {
+                    throw $_
+                }
+            }
         }
 
         # Initilize runspace pool
@@ -624,6 +659,7 @@ function Save-PSResourceInParallel {
         if ($PSCmdlet.'ParameterSetName' -eq 'NameParameterSet') {
             foreach ($ModuleName in $Name) {
                 $Splat = [ordered]@{
+                    'AcceptLicense'       = [bool] $AcceptLicense
                     'AuthenticodeCheck'   = [bool] $AuthenticodeCheck
                     'IncludeXml'          = [bool] $IncludeXml
                     'Name'                = [string] $ModuleName
@@ -647,6 +683,7 @@ function Save-PSResourceInParallel {
                     # From $RequiredResource
                     'Name'                = [string] $_
                     # Not from $RequiredResource
+                    'AcceptLicense'       = [bool] $AcceptLicense
                     'AuthenticodeCheck'   = [bool] $AuthenticodeCheck
                     'IncludeXml'          = [bool] $IncludeXml
                     'Path'                = [string] $Path
@@ -672,6 +709,7 @@ function Save-PSResourceInParallel {
                     # From $InputObject
                     'Name'                = [string] $_.'Name'
                     # Not from $RequiredResource
+                    'AcceptLicense'       = [bool] $AcceptLicense
                     'AuthenticodeCheck'   = [bool] $AuthenticodeCheck
                     'IncludeXml'          = [bool] $IncludeXml
                     'Path'                = [string] $Path
@@ -981,6 +1019,7 @@ function Update-ModulesInstalled {
                 Write-Information -MessageData ('Updating {0} outdated modules in parallel.' -f $ModulesInstalledWithNewerVersionAvailable.'Count'.ToString())
             }
             $Splat = [ordered]@{
+                'AcceptLicense'       = [bool]($AcceptLicenses)
                 'AuthenticodeCheck'   = [bool](-not $SkipAuthenticodeCheck)
                 'IncludeXml'          = [bool] $true
                 'Name'                = [string[]] $ModulesInstalledWithNewerVersionAvailable.'Name'
@@ -1112,6 +1151,7 @@ function Install-ModulesMissing {
 
         # Install missing modules
         $Splat = [ordered]@{
+            'AcceptLicense'       = [bool]($AcceptLicenses)
             'AuthenticodeCheck'   = [bool](-not $SkipAuthenticodeCheck)
             'IncludeXml'          = [bool] $true
             'Name'                = [string[]] $ModulesMissingPsgInfo.'Name'
@@ -1268,6 +1308,7 @@ function Install-SubModulesMissing {
             Write-Information -MessageData ('Installing {0} missing submodules in parallel.' -f $SubModulesMissing.'Count'.ToString())
         }
         $Splat = [ordered]@{
+            'AcceptLicense'       = [bool]($AcceptLicenses)
             'AuthenticodeCheck'   = [bool](-not $SkipAuthenticodeCheck)
             'IncludeXml'          = [bool] $true
             'Name'                = [string[]] $SubModulesMissing.'Name'
@@ -2023,7 +2064,7 @@ function Get-Summary {
         # Check if any got any objects
         if (
             $Script:StatisticsVariables.ForEach{
-                Get-Variable -Name $_.'VariableName' -Scope 'Script' -ValueOnly -ErrorAction 'SilentlyContinue'
+                Get-Variable -Name $_.'VariableName' -Scope 'Script' -ValueOnly -ErrorAction 'Ignore'
             }.Where{
                 -not [string]::IsNullOrEmpty($_)
             }.'Count' -le 0
