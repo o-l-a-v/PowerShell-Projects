@@ -5,6 +5,27 @@
 * Changelog format follows [Keep a Changelog](https://keepachangelog.com/en).
 * Versioning adheres to [Semantic Versioning](https://semver.org/).
 
+## 1.21.0 - 2025-01-13
+
+### Added
+
+* Function `Save-PSResourceInParallel`:
+  * `-AcceptLicenses` input parameter finally works again.
+    * `Microsoft.PowerShell.PSResourceGet` v1.1.0 was released with `-AcceptLicense` finally added to `Save-PSResource`.
+  * Retry `Save-PSResource` if DNS fails to resolve. Both for added resiliency, but also to work around the Edgio bankruptcy / `*.azureedge.net` CDN retirement, where DNS sometimes fail to resolve due to errors in DNS propagation.
+    * 2025-01-03: <https://github.com/PowerShell/PowerShell/discussions/24734>
+    * 2025-01-13: <https://github.com/PowerShell/PowerShellGallery/issues/297>
+
+### Fixed
+
+* Function `Find-PSGalleryPackageLatestVersionUsingApiInBatch`:
+  * Workaround for PowerShell Gallery API bug where `$select=Tags` does not return tags for some modules, like `Trackyon.Utils`.
+    * 2025-01-13: <https://github.com/PowerShell/PowerShellGallery/issues/298>
+  * Use `IsLatestVersion eq true` instead of unary comparison `IsLatestVersion` due to PowerShell Gallery API bug.
+    * 2024-05-15: <https://github.com/PowerShell/PowerShellGallery/issues/273>
+    * Fix in PSResourceGet: <https://github.com/PowerShell/PSResourceGet/pull/1761>
+* Use `-ErrorAction Ignore` instead of `SilentlyContinue` when `Get-Variable` on a variable that might not exist yet to not add the error to the `$Error` variable.
+
 ## 1.20.2 - 2024-12-27
 
 ### Fixed
