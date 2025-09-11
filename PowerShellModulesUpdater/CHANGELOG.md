@@ -5,6 +5,22 @@
 * Changelog format follows [Keep a Changelog](https://keepachangelog.com/en).
 * Versioning adheres to [Semantic Versioning](https://semver.org/).
 
+## 1.21.2 - 2025-09-07
+
+### Fixed
+
+* Make sure PSGallery is registered as PSResourceRepository.
+  * In rare instances this fails, so now script makes sure it exists, else does `Register-PSResourceRepository -PSGallery`.
+
+## 1.21.1 - 2025-01-30
+
+### Fixed
+
+* Function `Save-PSResourceInParallel`:
+  * 5.1 compatibility:
+    * Does not work: `[System.Collections.Generic.List[ordered]]::new()`
+    * Works: `[System.Collections.Generic.List[System.Collections.Specialized.OrderedDictionary]]::new()`
+
 ## 1.21.0 - 2025-01-13
 
 ### Added

@@ -7,7 +7,8 @@
     ]
   },
   "[powershell]": {
-    "editor.tabSize": 4
+    "editor.tabSize": 4,
+    "editor.wordBasedSuggestions": "off"
   },
   "editor.formatOnSave": true,
   "editor.indentSize": "tabSize",
@@ -22,6 +23,24 @@
   "markdown.extension.orderedList.autoRenumber": true,
   "markdown.extension.orderedList.marker": "one",
   "markdown.updateLinksOnFileMove.enabled": "prompt",
+  "powershell.codeFormatting.addWhitespaceAroundPipe": true,
+  "powershell.codeFormatting.alignPropertyValuePairs": true,
+  "powershell.codeFormatting.autoCorrectAliases": true,
+  "powershell.codeFormatting.avoidSemicolonsAsLineTerminators": true,
+  "powershell.codeFormatting.newLineAfterCloseBrace": true,
+  "powershell.codeFormatting.newLineAfterOpenBrace": true,
+  "powershell.codeFormatting.openBraceOnSameLine": true,
+  "powershell.codeFormatting.pipelineIndentationStyle": "IncreaseIndentationForFirstPipeline",
+  "powershell.codeFormatting.preset": "Custom",
+  "powershell.codeFormatting.trimWhitespaceAroundPipe": true,
+  "powershell.codeFormatting.useConstantStrings": true,
+  "powershell.codeFormatting.useCorrectCasing": false,
+  "powershell.codeFormatting.whitespaceAfterSeparator": true,
+  "powershell.codeFormatting.whitespaceAroundOperator": true,
+  "powershell.codeFormatting.whitespaceBeforeOpenBrace": false,
+  "powershell.codeFormatting.whitespaceBeforeOpenParen": false,
+  "powershell.codeFormatting.whitespaceBetweenParameters": false,
+  "powershell.codeFormatting.whitespaceInsideBrace": false,
   "powershell.scriptAnalysis.enable": true,
   "powershell.scriptAnalysis.settingsPath": "../PSScriptAnalyzerSettings.psd1"
 }
