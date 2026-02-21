@@ -5,7 +5,7 @@
     .NOTES
         Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
         Created:  2024-03-28
-        Modified: 2024-11-02
+        Modified: 2026-02-21
 
     .EXAMPLE
         # Check only
@@ -14,6 +14,10 @@
     .EXAMPLE
         # Write changes
         & $(Try{$psEditor.GetEditorContext().CurrentFile.Path}Catch{$psISE.CurrentFile.FullPath}); $LASTEXITCODE
+
+    .EXAMPLE
+        # Force reinstall
+        & $(Try{$psEditor.GetEditorContext().CurrentFile.Path}Catch{$psISE.CurrentFile.FullPath}) -ForceReinstall; $LASTEXITCODE
 #>
 
 
@@ -22,9 +26,6 @@
 [CmdletBinding(SupportsShouldProcess)]
 [OutputType([System.Void])]
 Param(
-    [Parameter(HelpMessage = 'Whether to write changes, which requires script to run as administrator.')]
-    [switch] $WriteChanges,
-
     [Parameter(HelpMessage = 'Whether to force reinstall, even if the same DLL already is installed.')]
     [switch] $ForceReinstall
 )
@@ -34,27 +35,65 @@ Param(
 # PowerShell preferences
 $ErrorActionPreference = 'Stop'
 $InformationPreference = 'Continue'
-$ProgressPreference    = 'SilentlyContinue'
+$ProgressPreference = 'SilentlyContinue'
 
 
 
 # Failproof
 ## Running on Windows
 if ($PSVersionTable.'Platform' -eq 'Unix') {
-    Throw 'Must run on Windows.'
+    Throw 'Script is made for Windows only.'
 }
 
 ## Running as 64 bit process
 if (-not [System.Environment]::Is64BitProcess) {
-    Throw 'Must run as 64 bit process.'
+    Throw 'Script must be run as 64 bit process.'
 }
 
-## Running as administrator if -WriteChanges
+## Running as administrator if not -WhatIf
 if (
     -not $PSBoundParameters.ContainsKey('WhatIf') -and
     -not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 ) {
-    Throw '-WriteChanges requires script to run as administrator.'
+    Write-Information -MessageData 'Running without -WhatIf requires script to run as administrator.'
+    # Check if gsudo is present
+    $GsudoIsPresent = [bool](Get-Command -Name 'gsudo' -ErrorAction 'Ignore')
+    # Ask to escalate if gsudo was found
+    if ($GsudoIsPresent) {
+        # Ask user whether to escalate
+        $Choice = [string]::Empty
+        do {
+            $Choice = Read-Host -Prompt 'Escalate to run as admin using gsudo? Y / N'
+            if ($Choice -notin 'n', 'y') {
+                Write-Warning -Message ('You entered "{0}", but choice must be either "n" or "y". CTRL+C to abort.' -f $Choice)
+            }
+        }
+        until ($Choice -in 'n', 'y')
+        # Escalate if user chose yes
+        if ($Choice -eq 'y') {
+            $InputParameters = [string[]](
+                $PSBoundParameters.GetEnumerator().ForEach{
+                    if ($_.'Value' -is [switch]) {
+                        if ($_.'Value'.'IsPresent') { "-$($_.Key)" }
+                    }
+                    else {
+                        "-$($_.Key)", "`"$($_.Value)`""
+                    }
+                }
+            )
+            gsudo (Get-Process -Id $PID).'Path' -File $MyInvocation.'MyCommand'.'Path' $InputParameters
+            Exit $LASTEXITCODE
+        }
+        else {
+            Write-Information -MessageData 'You chose not to escalate, script exited.'
+            Exit 0
+        }
+    }
+    # Else exit the script
+    else {
+        Write-Information -MessageData 'Script will exit as it did not find gsudo nor sudo. Run script as admin manually instead.'
+
+    }
 }
 
 
@@ -65,26 +104,20 @@ $FileName = [string](
     'jxl_winthumb_{0}.dll' -f
     $(
         switch -Exact ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {
-            'Arm64' {
-                'aarch64'; break
-            }
-            'X64' {
-                'x86_64'; break
-            }
-            'X86' {
-                'i686'; break
-            }
+            'Arm64' {'aarch64'}
+            'X64' {'x86_64'}
+            'X86' {'i686'}
             default {Throw ('"{0}" is an unhandled OS architecture.' -f $_)}
         }
     )
 )
-$DownloadPath = [string] [System.IO.Path]::Combine($env:TEMP,$FileName)
-$DestinationPath = [string] [System.IO.Path]::Combine($env:windir,'System32',$FileName)
+$DownloadPath = [string] [System.IO.Path]::Combine($env:TEMP, $FileName)
+$DestinationPath = [string] [System.IO.Path]::Combine($env:windir, 'System32', $FileName)
 
 
 
 # Script help variable
-$Success  = [bool] $true
+$Success = [bool] $true
 $ExitCode = [int32] 0
 
 
@@ -99,55 +132,28 @@ Try {
             [PSCustomObject[]](
                 Invoke-RestMethod -Method 'Get' -Uri ('https://api.github.com/repos/{0}/releases' -f $([uri]$GitHubRepo).'AbsolutePath'.TrimStart('/'))
             )
-        ) | Sort-Object -Property @{'Expression' ={[datetime]$_.'published_at'}} -Descending | Select-Object -First 1
+        ) | Sort-Object -Property @{'Expression' = {[datetime]$_.'published_at'}} -Descending | Select-Object -First 1
     )
 
     ## Get latest version from GitHub
-    $LatestVersion  = [System.Version]($Latest.'tag_name'.TrimStart('v'))
-    $LatestFile     = [PSCustomObject] $Latest.'assets'.Where{$_.'name' -eq $FileName}
-    $LatestFileUri  = [string] $LatestFile.'browser_download_url'
+    $LatestVersion = [System.Version]($Latest.'tag_name'.TrimStart('v'))
+    $LatestFile = [PSCustomObject] $Latest.'assets'.Where({$_.'name' -eq $FileName}, 'First')[0]
+    $LatestFileUri = [string] $LatestFile.'browser_download_url'
     $LatestFileSize = [uint32] $LatestFile.'size'
+    $LatestSha256 = [string] $LatestFile.'digest'.Split(':')[-1]
 
     ## Output info
     Write-Information -MessageData ('LatestVersion: {0}' -f $LatestVersion.ToString())
     Write-Information -MessageData ('LatestFileUri: {0}' -f $LatestFileUri)
+    Write-Information -MessageData ('LatestSha256:  {0}' -f $LatestSha256)
 
     ## Failproof
-    if ([string]::IsNullOrEmpty($LatestFileUri)) {
-        Throw 'Failed to get URL to latest version DLL.'
+    if ([string]::IsNullOrWhitespace($LatestFileUri)) {
+        Throw 'Failed to get URL of latest version DLL.'
     }
-
-
-    # Download
-    ## Introduce step
-    Write-Information -MessageData ('{0}# Download' -f [System.Environment]::NewLine)
-
-    ## Output download target location
-    Write-Information -MessageData ('Download to "{0}"' -f $DownloadPath)
-
-    ## Delete item if it already exists
-    if ([System.IO.File]::Exists($DownloadPath)) {
-        $null = [System.IO.File]::Delete($DownloadPath)
+    if ([string]::IsNullOrWhiteSpace($LatestSha256)) {
+        Throw 'Failed to get SHA256 of latest version DLL.'
     }
-
-    ## Download
-    $null = [System.Net.WebClient]::new().DownloadFile(
-        $LatestFileUri,
-        $DownloadPath
-    )
-
-    ## Failproof
-    ### Downloaded file does not exist
-    if (-not [System.IO.File]::Exists($DownloadPath)) {
-        Throw 'Failed to download - Did not find the expected file.'
-    }
-    ### Downloaded file size is not equal to what GitHub says it should be
-    if ((Get-Item -Path $DownloadPath).'Length' -ne $LatestFileSize) {
-        Throw 'Failed to download - Downloaded file does not match expected file size.'
-    }
-
-    ## Output success
-    Write-Information -MessageData 'Success.'
 
 
     # Detect and compare existing file
@@ -158,11 +164,10 @@ Try {
     if ([System.IO.File]::Exists($DestinationPath)) {
         Write-Information -MessageData ('Destination "{0}" already exists.' -f $DestinationPath)
         # Collect information
-        $DownloadChecksum = Get-FileHash -Path $DownloadPath -Algorithm 'SHA256'
         $DestinationChecksum = Get-FileHash -Path $DestinationPath -Algorithm 'SHA256'
         $DestinationVersion = [System.Version]((Get-Item -Path $DestinationPath).'VersionInfo'.'FileVersion')
         # Compare checmsums
-        $ChecksumMatch = [bool]($DownloadChecksum.'Hash' -eq $DestinationChecksum.'Hash')
+        $ChecksumMatch = [bool]($LatestSha256 -eq $DestinationChecksum.'Hash')
         # Compare versions
         $VersionMatch = [bool]($DestinationVersion -ge $LatestVersion)
         # Determine if already installed
@@ -195,7 +200,7 @@ Try {
             }
         )
     ) {
-        if ($PSCmdlet.ShouldProcess('jxl-winthumb','install')) {
+        if ($PSCmdlet.ShouldProcess('jxl-winthumb', 'install')) {
             # Give info
             if ($AlreadyInstalled) {
                 Write-Information -MessageData '-WhatIf was not specified, and -ForceReinstall was specified, will install.'
@@ -204,15 +209,56 @@ Try {
                 Write-Information -MessageData '-WhatIf was not specified, will install.'
             }
 
+            # Download
+            ## Introduce step
+            Write-Information -MessageData ('{0}# Download' -f [System.Environment]::NewLine)
+
+            ## Output download target location
+            Write-Information -MessageData ('Download to "{0}"' -f $DownloadPath)
+
+            ## Delete item if it already exists
+            if ([System.IO.File]::Exists($DownloadPath)) {
+                $null = [System.IO.File]::Delete($DownloadPath)
+            }
+
+            ## Download
+            $null = [System.Net.WebClient]::new().DownloadFile(
+                $LatestFileUri,
+                $DownloadPath
+            )
+
+            ## Failproof
+            ### Downloaded file does not exist
+            if (-not [System.IO.File]::Exists($DownloadPath)) {
+                Throw 'Failed to download - Did not find the expected file.'
+            }
+            ### Downloaded file size is not equal to what GitHub says it should be
+            if ((Get-Item -Path $DownloadPath).'Length' -ne $LatestFileSize) {
+                Throw 'Failed to download - Downloaded file does not match expected file size.'
+            }
+            ### Downloaded file SHA256 does not match GitHub asset digest
+            $DownloadChecksum = [string] (Get-FileHash -Path $DownloadPath -Algorithm 'SHA256').'Hash'
+            if ($DownloadChecksum -ne $LatestSha256) {
+                Throw (
+                    'SHA256 from downloaded file ("{0}..") does not match GitHub asset digest ("{1}..").' -f
+                    $LatestSha256.Substring(0, 5),
+                    $DownloadChecksum.Substring(0, 5)
+                )
+            }
+
+            ## Output success
+            Write-Information -MessageData 'Success.'
+
             # Get explorer.exe path
             $ExplorerPath = [string]((Get-Process -Name 'explorer')[0].'path')
-            if (-not $? -or [string]::IsNullOrEmpty($ExplorerPath)) {
+            if (-not $? -or [string]::IsNullOrWhitespace($ExplorerPath)) {
                 Throw 'Failed to get path of explorer.exe.'
             }
 
             # Kill explorer.exe
-            Write-Information -MessageData 'Kill explorer.exe.'
+            Write-Information -MessageData 'Kill explorer.exe and wait a second.'
             $null = Stop-Process -Name 'explorer' -Force
+            Start-Sleep -Seconds 1
 
             # Copy new file, overwrite if it already exists
             Write-Information -MessageData 'Copy downloaded file to destination, overwrite if it already exists.'
@@ -220,12 +266,12 @@ Try {
 
             # Register new file
             Write-Information -MessageData 'Register dll with regsvr32.'
-            $null = cmd /c ('regsvr32 /s "{0}"' -f $DestinationPath)
-            if (-not $? -or $LASTEXITCODE -ne 0) {
-                if ($LASTEXITCODE -ne 0) {
-                    $ExitCode = $LASTEXITCODE
+            $Process = Start-Process -Path 'regsvr32' -ArgumentList '/s', ('"{0}"' -f $DestinationPath) -NoNewWindow -PassThru -Wait
+            if (-not $? -or $Process.'ExitCode' -ne 0) {
+                if ($Process.'ExitCode' -ne 0) {
+                    $ExitCode = $Process.'ExitCode'
                 }
-                Throw 'regsvr32 failed.'
+                Throw ('regsvr32 failed with exit code "{0}".' -f $Process.'ExitCode')
             }
 
             # Start explorer
@@ -239,12 +285,16 @@ Try {
 }
 Catch {
     # Make sure explorer.exe runs
-    if (-not [bool]($(Try{$null = Get-Process -Name 'explorer'; $?}Catch{$false}))) {
+    if (-not (Get-Process -Name 'explorer' -ErrorAction 'Ignore')) {
         $null = Start-Process -FilePath $ExplorerPath
     }
 
     # Set exit code
-    if ($ExitCode -eq 0 -and $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+    if (
+        $ExitCode -eq 0 -and
+        $null -ne $LASTEXITCODE -and
+        $LASTEXITCODE -ne 0
+    ) {
         $ExitCode = $LASTEXITCODE
     }
 
@@ -258,17 +308,15 @@ Catch {
 
 
 # Clean up files
-## Introduce step
-Write-Information -MessageData ('{0}# Clean up files' -f [System.Environment]::NewLine)
+if (-not [string]::IsNullOrEmpty($DownloadPath) -and [System.IO.Path]::Exists($DownloadPath)) {
+    # Introduce step
+    Write-Information -MessageData ('{0}# Clean up files' -f [System.Environment]::NewLine)
 
-## Clean up files
-$([string[]]($DownloadPath)).Where{
-    -not [string]::IsNullOrEmpty($_) -and [System.IO.File]::Exists($_)
-}.ForEach{
+    # Clean up files
     Write-Information -MessageData (
-        'Deleting "{0}". Success? "{1}".' -f $_, $(
+        'Deleting "{0}". Success? "{1}".' -f $DownloadPath, $(
             Try {
-                $null = [System.IO.File]::Delete($_)
+                $null = [System.IO.File]::Delete($DownloadPath)
                 $?
             }
             Catch {

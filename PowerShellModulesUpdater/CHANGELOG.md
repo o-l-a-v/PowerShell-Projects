@@ -5,6 +5,20 @@
 * Changelog format follows [Keep a Changelog](https://keepachangelog.com/en).
 * Versioning adheres to [Semantic Versioning](https://semver.org/).
 
+## 1.21.3 - 2025-10-07
+
+### Changed
+
+* Function `Find-PSGalleryPackageLatestVersionUsingApiInBatch`:
+  * Use `[Parameter(ParameterSetName = '__AllParameterSets')]` instead of duplicating `[Parameter()]` per parameter set.
+
+### Fixed
+
+* Removed unused string formatting (`-f`) in the output.
+* Removed unused function `Get-ModuleInstalledVersion`.
+* Function `Find-PSGalleryPackageLatestVersionUsingApiInBatch`:
+  * Removed empty duplicate `[CmdletBinding()]`.
+
 ## 1.21.2 - 2025-09-07
 
 ### Fixed

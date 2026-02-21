@@ -5,6 +5,21 @@
 * Changelog format follows [Keep a Changelog](https://keepachangelog.com/en).
 * Versioning adheres to [Semantic Versioning](https://semver.org/).
 
+## v1.3.0 - 2026-02-21
+
+### Added
+
+* Optionally escalate using gsudo if present and not `-WhatIf`.
+
+### Changed
+
+* Get SHA256 from GitHub asset digest, don't have to download anything to get the checksum.
+* Reduce unneccessary verbosity in some if checks.
+
+### Fixed
+
+* Did not clean input parameter `-WriteChanges` after `-WhatIf` what implemented.
+
 ## v1.2.0 - 2024-12-19
 
 ### Added
