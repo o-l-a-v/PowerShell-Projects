@@ -37,6 +37,9 @@ jobs:
       - name: ⬇️ Install the latest version of uv
         if: steps.filter.outputs.markdown == 'true' || steps.filter.outputs.rumdlconf == 'true'
         uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+        with:
+          cache-dependency-glob: ""
+          enable-cache: true
       - name: 🔍 Lint changed markdown files with rumdl
         if: steps.filter.outputs.markdown == 'true' && steps.filter.outputs.rumdlconf == 'false'
         shell: bash
