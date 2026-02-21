@@ -34,14 +34,14 @@ jobs:
             rumdlconf:
               - added|modified: '.rumdl.toml'
           list-files: escape
-      # - name: ⬇️ Install the latest version of uv
-      #   if: steps.filter.outputs.markdown == 'true' || steps.filter.outputs.rumdlconf == 'true'
-      #   uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+      - name: ⬇️ Install the latest version of uv
+        if: steps.filter.outputs.markdown == 'true' || steps.filter.outputs.rumdlconf == 'true'
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
       - name: 🔍 Lint changed markdown files with rumdl
         if: steps.filter.outputs.markdown == 'true' && steps.filter.outputs.rumdlconf == 'false'
         shell: bash
-        run: pipx run rumdl check ${{ steps.filter.outputs.markdown_files }}
+        run: uvx rumdl check ${{ steps.filter.outputs.markdown_files }}
       - name: 🔍 Lint all markdown files with rumdl when ".rumdl.toml" is updated
         if: steps.filter.outputs.rumdlconf == 'true'
         shell: bash
-        run: pipx run rumdl check .
+        run: uvx run rumdl check .
