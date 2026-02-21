@@ -44,4 +44,4 @@ jobs:
       - name: 🔍 Lint all markdown files with rumdl when ".rumdl.toml" is updated
         if: steps.filter.outputs.rumdlconf == 'true'
         shell: bash
-        run: uvx run rumdl check .
+        run: uvx rumdl check .
