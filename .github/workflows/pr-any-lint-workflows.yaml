@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 🛎️ GitHub checkout branch "${{ github.head_ref || github.ref_name }}"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
       - name: 🔍 Get changed files
@@ -33,7 +33,7 @@ jobs:
           list-files: escape
       - name: ⬇️ Install the latest version of uv
         if: steps.filter.outputs.workflows == 'true'
-        uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
       - name: 🔍 Run zizmor
         if: steps.filter.outputs.workflows == 'true'
         run: |
