@@ -11,6 +11,8 @@
 * [ ] Use Dev Drive on Windows if present for both `-TemporaryPath` and `-Path` with `Save-PSResource` for greater speed and hopefully not be blocked by antimalware realtime scanning.
   * Related issue: <https://github.com/PowerShell/PSResourceGet/issues/1662>
   * Related info about Dev Drive and Performance Mode: <https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-endpoint-antivirus-performance-mode>
+* [ ] Speed up discovery of installed modules.
+* [ ] Speed up uninstall of outdated module versions.
 
 ### Depends on others
 
@@ -39,6 +41,7 @@
           * 2023-04-02 - "Find-PSResource with a string array of module names is slow: Bulk/batch the API calls?": <https://github.com/PowerShell/PSResourceGet/issues/1045>
 * [ ] Have user preferences of what modules to install outside the actual script.
 * [ ] Publish to PSGallery as script or module.
+* [ ] Write actual progress bar, either `Write-Progress` or PwshSpectreConsole?
 
 ### Depends on others
 

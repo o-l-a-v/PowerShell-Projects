@@ -17,7 +17,7 @@
     .NOTES
         Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
         Created:  2019-03-10
-        Modified: 2025-01-30
+        Modified: 2025-10-07
 
     .EXAMPLE
         # Run from PowerShell ISE or Visual Studio Code, user context
@@ -76,7 +76,10 @@ Param (
             (Get-Volume -DriveLetter $_).'FileSystem' -eq 'ReFS'
         })
     ]
-    [string] $DevDrive
+    [string] $DevDrive,
+
+    [Parameter(HelpMessage = 'Whether to keep prereleases.')]
+    [bool] $KeepPrereleases = $true
 )
 
 
@@ -236,34 +239,31 @@ function Find-PSGalleryPackageLatestVersionUsingApiInBatch {
         .NOTES
             Author:   Olav Rønnestad Birkeland | github.com/o-l-a-v
             Created:  2024-03-13
-            Modified: 2025-01-13
+            Modified: 2025-10-07
 
         .EXAMPLE
             Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds 'Az.Accounts','Az.Resources' -Verbose
     #>
 
+
     # Input parameters and expected output
     [CmdletBinding(DefaultParameterSetName = 'Stable')]
-    [CmdletBinding()]
     [OutputType([hashtable], [PSCustomObject])]
     Param(
-        [Parameter(Mandatory, ParameterSetName = 'Absolute')]
-        [Parameter(Mandatory, ParameterSetName = 'Stable')]
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory, ParameterSetName = '__AllParameterSets')]
         $PackageIds,
 
         [Alias('Absolute', 'Prerelease')]
         [Parameter(HelpMessage = 'Include prerelease.', ParameterSetName = 'Absolute')]
         [switch] $IncludePrerelease,
 
-        [Parameter(HelpMessage = 'Optionally return result as hashtable.', ParameterSetName = 'Absolute')]
-        [Parameter(HelpMessage = 'Optionally return result as hashtable.', ParameterSetName = 'Stable')]
+        [Parameter(HelpMessage = 'Optionally return result as hashtable.', ParameterSetName = '__AllParameterSets')]
         [switch] $AsHashtable,
 
-        [Parameter(HelpMessage = 'Strip some info to speed up interaction with PowerShell Gallery API.', ParameterSetName = 'Absolute')]
-        [Parameter(HelpMessage = 'Strip some info to speed up interaction with PowerShell Gallery API.', ParameterSetName = 'Stable')]
+        [Parameter(HelpMessage = 'Strip some info to speed up interaction with PowerShell Gallery API.', ParameterSetName = '__AllParameterSets')]
         [switch] $MinimalInfo
     )
+
 
     # Process
     Process {
@@ -473,6 +473,7 @@ function Find-PSGalleryPackageLatestVersionUsingApiInBatch {
                 }
             ) | Sort-Object -Property 'Name'
         )
+
 
         # Return
         if ($AsHashtable) {
@@ -813,72 +814,6 @@ function Save-PSResourceInParallel {
 
 
 #region    Modules
-#region    Get-ModuleInstalledVersion
-function Get-ModuleInstalledVersion {
-    <#
-        .SYNOPSIS
-            Gets all installed versions of a module.
-
-        .DESCRIPTION
-            Gets all installed versions of a module.
-            * Includes workaround to handle versions that can't be parsed as [System.Version]
-
-        .PARAMETER ModuleName
-            String, name of the module you want to check.
-    #>
-    [CmdletBinding()]
-    [OutputType([System.Version], [System.Version[]])]
-    Param (
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string] $ModuleName,
-
-        [Parameter()]
-        [switch] $Latest
-    )
-
-    # Begin
-    Begin {}
-
-    # Process
-    Process {
-        # Assets
-        $Path = [string] [System.IO.Path]::Combine($Script:ModulesPath, $ModuleName)
-
-        # Get installed versions of $ModuleName
-        $AllVersions = [System.Version[]](
-            [System.IO.Directory]::GetDirectories($Path).Where{
-                [System.IO.File]::Exists([System.IO.Path]::Combine($_, 'PSGetModuleInfo.xml'))
-            }.ForEach{
-                $_.Split([System.IO.Path]::DirectorySeparatorChar)[-1]
-            }.Where{
-                Try {
-                    $null = $_ -as [System.Version]
-                    $?
-                }
-                Catch {
-                    $false
-                }
-            } | Sort-Object -Property @{'Expression' = {[System.Version]$_}} -Descending
-        )
-
-        # Return
-        if ($Latest.'IsPresent' -and $AllVersions.'Count' -ge 1) {
-            $AllVersions[0]
-        }
-        else {
-            $AllVersions
-        }
-    }
-
-    # End
-    End {
-    }
-}
-#endregion Get-ModuleInstalledVersion
-
-
-
 #region    Get-ModulesInstalled
 function Get-ModulesInstalled {
     <#
@@ -886,7 +821,7 @@ function Get-ModulesInstalled {
             Gets all currently installed modules.
 
         .NOTES
-            * Includes some workarounds to handle versions that can't be parsed as [System.Version], like beta/ pre-release.
+            * Includes some workarounds to handle versions that can't be parsed as [System.Version], like beta/pre-release.
 
         .EXAMPLE
             Get-ModulesInstalled -ForceRefresh
@@ -903,7 +838,7 @@ function Get-ModulesInstalled {
         [switch] $ForceRefresh,
 
         [Parameter()]
-        [switch] $IncludePreReleaseVersions
+        [switch] $IncludePrereleaseVersions
     )
 
     # Begin
@@ -993,7 +928,7 @@ function Update-ModulesInstalled {
         }
 
         # Assets
-        Write-Information -MessageData ('Get newest available version for all installed module(s).' -f $Script:ModulesInstalled.'Count'.ToString())
+        Write-Information -MessageData 'Get newest available version for all installed module(s).'
         $ModulesInstalledNewestVersion = Find-PSGalleryPackageLatestVersionUsingApiInBatch -PackageIds $Script:ModulesInstalled.'Name'.Where{$_ -notin $ModulesDontUpdate} -AsHashtable -MinimalInfo
         $ModulesInstalledWithNewerVersionAvailable = [PSCustomObject[]](
             $Script:ModulesInstalled.Where{
@@ -1492,7 +1427,7 @@ function Uninstall-ModulesOutdated {
     # Process
     Process {
         # Refresh Installed Modules variable
-        $null = Get-ModulesInstalled -AllVersions -ForceRefresh
+        $null = Get-ModulesInstalled -AllVersions -ForceRefresh -IncludePrereleaseVersions:$(-not $KeepPrereleases)
 
         # Skip if no installed modules were found
         if ($Script:ModulesInstalled.'Count' -le 0) {
