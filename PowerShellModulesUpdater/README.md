@@ -94,7 +94,9 @@ Does not support semantic versioning v2.0.0
 If raw version can't be parsed, manually parse it.
 
 * Regex to remove info that can't be parsed as `[System.Version]`, store it somewhere.
-####### Ideas
+
+###### # Ideas
+
 * Create own class for handling version numbers that `[System.Version]` does not handle?
 * Add a attribute to the object "nonstable", if raw version can't be parsed as `[System.Version]`?
 
