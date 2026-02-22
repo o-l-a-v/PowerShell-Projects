@@ -19,7 +19,7 @@ Param(
     [string[]] $FilePaths,
 
     [Parameter()]
-    [string] $PssaSettingsFile = './PSScriptAnalyzerSettings.psd1'
+    [string] $PssaSettingsFile = './.config/PSScriptAnalyzerSettings.psd1'
 )
 
 

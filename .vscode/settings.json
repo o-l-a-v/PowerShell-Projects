@@ -36,5 +36,5 @@
   "powershell.codeFormatting.whitespaceBetweenParameters": false,
   "powershell.codeFormatting.whitespaceInsideBrace": false,
   "powershell.scriptAnalysis.enable": true,
-  "powershell.scriptAnalysis.settingsPath": "../PSScriptAnalyzerSettings.psd1"
+  "powershell.scriptAnalysis.settingsPath": "../.config/PSScriptAnalyzerSettings.psd1"
 }
